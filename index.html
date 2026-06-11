@@ -129,6 +129,32 @@
     padding: 12px;
   }
 
+  .progress-wrap {
+    max-width: 480px;
+    margin: 24px auto;
+    padding: 0 24px;
+    text-align: center;
+  }
+  .progress-track {
+    height: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    border-radius: 999px;
+    transition: width 0.25s ease;
+  }
+  .progress-text {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -146,7 +172,10 @@
     flex-direction: column;
     transition: transform 0.12s, box-shadow 0.12s;
     position: relative;
+    content-visibility: auto;
+    contain-intrinsic-size: 230px 420px;
   }
+  .card.filtered-out { display: none; }
   .card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 22px rgba(0,0,0,0.5);
@@ -208,21 +237,11 @@
   .rarity-R { color: #e0b860; }
   .rarity-M { color: #e86a33; }
 
-  .loader {
+  .empty-note {
     text-align: center;
     padding: 60px 20px;
     color: var(--muted);
   }
-  .loader .spinner {
-    width: 42px;
-    height: 42px;
-    border: 4px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    margin: 0 auto 16px;
-    animation: spin 0.9s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
   .error-box {
     max-width: 560px;
     margin: 40px auto;
@@ -286,12 +305,14 @@
 </div>
 
 <div class="status-bar" id="status"></div>
-<div id="content">
-  <div class="loader">
-    <div class="spinner"></div>
-    Lade Kartendaten von Scryfall …
-  </div>
+
+<div class="progress-wrap" id="progress">
+  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
 </div>
+
+<div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
+<div class="grid" id="grid"></div>
 
 <script>
 (function () {
@@ -306,8 +327,16 @@
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
 
   let cards = [];
+  const cardEls = new Map(); // card.id -> DOM-Element (wird nur einmal gebaut)
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
   const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false };
+
+  const grid = document.getElementById("grid");
+  const statusBar = document.getElementById("status");
+  const emptyNote = document.getElementById("empty-note");
+  const progress = document.getElementById("progress");
+  const progressFill = document.getElementById("progress-fill");
+  const progressText = document.getElementById("progress-text");
 
   function saveFavorites() {
     localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
@@ -330,7 +359,7 @@
       colors: card.colors !== undefined ? card.colors
             : (card.card_faces ? [...new Set(card.card_faces.flatMap(f => f.colors || []))] : []),
       rarity: card.rarity,
-      typeLine: card.type_line || "",
+      imageSmall: img.small || "",
       image: img.normal || img.large || img.small || "",
       url: card.scryfall_uri,
       price: cheapestPrice(card.prices || {}),
@@ -338,27 +367,87 @@
     };
   }
 
-  async function fetchAllCards() {
+  function setProgress(loaded, total) {
+    const pct = total ? Math.round((loaded / total) * 100) : 0;
+    progressFill.style.width = pct + "%";
+    progressText.textContent = "Lade Kartendaten: " + loaded + " / " + (total || "?") + " (" + pct + " %)";
+  }
+
+  // Lädt die Karten seitenweise und ruft onBatch nach jeder Seite auf,
+  // damit die ersten Karten sofort sichtbar sind.
+  async function loadCards(onBatch) {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       try {
         const { time, data } = JSON.parse(cached);
-        if (Date.now() - time < CACHE_TTL && Array.isArray(data) && data.length) return data;
+        if (Date.now() - time < CACHE_TTL && Array.isArray(data) && data.length) {
+          setProgress(data.length, data.length);
+          onBatch(data);
+          return;
+        }
       } catch (e) { /* Cache defekt -> neu laden */ }
     }
     let url = API_URL;
-    const result = [];
+    const all = [];
     while (url) {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const page = await res.json();
-      result.push(...page.data.map(simplify));
+      const batch = page.data.map(simplify);
+      all.push(...batch);
+      setProgress(all.length, page.total_cards || all.length);
+      onBatch(batch);
       url = page.has_more ? page.next_page : null;
     }
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: result }));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: all }));
     } catch (e) { /* localStorage voll -> ohne Cache weiter */ }
-    return result;
+  }
+
+  function formatPrice(card) {
+    if (card.price === null) return '<span class="price unknown">kein Preis verfügbar</span>';
+    const eur = card.price.toFixed(2).replace(".", ",") + " €";
+    const note = card.foilOnly ? " <small>(Foil)</small>" : " <small>ab</small>";
+    return '<span class="price">' + eur + note + "</span>";
+  }
+
+  function buildCardEl(card) {
+    const el = document.createElement("div");
+    el.className = "card";
+    // srcset: kleines Bild für kleine Kacheln/Mobil, normales für Desktop/Retina
+    el.innerHTML =
+      '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener">' +
+        '<img loading="lazy" decoding="async"' +
+        ' src="' + card.image + '"' +
+        (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
+        ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
+      "</a>" +
+      '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
+        (favorites.has(card.id) ? "★" : "☆") +
+      "</button>" +
+      '<div class="info">' +
+        '<div class="name">' + card.name + "</div>" +
+        '<div class="meta">#' + card.number + ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+          (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
+        formatPrice(card) +
+      "</div>";
+    el.querySelector(".fav-btn").addEventListener("click", e => {
+      const btn = e.currentTarget;
+      if (favorites.has(card.id)) {
+        favorites.delete(card.id);
+        btn.classList.remove("faved");
+        btn.textContent = "☆";
+      } else {
+        favorites.add(card.id);
+        btn.classList.add("faved");
+        btn.textContent = "★";
+      }
+      saveFavorites();
+      // Nur wenn der Favoriten-Filter aktiv ist, ändert sich die Sichtbarkeit
+      if (filters.favsOnly) applyFilters();
+      else updateStatus(grid.querySelectorAll(".card:not(.filtered-out)").length);
+    });
+    return el;
   }
 
   function matchesColorFilter(card) {
@@ -373,15 +462,17 @@
     return false;
   }
 
-  function visibleCards() {
-    let list = cards.filter(c => {
-      if (!matchesColorFilter(c)) return false;
-      if (filters.favsOnly && !favorites.has(c.id)) return false;
-      if (filters.search && !c.name.toLowerCase().includes(filters.search)) return false;
-      if (filters.priceMin !== null && (c.price === null || c.price < filters.priceMin)) return false;
-      if (filters.priceMax !== null && (c.price === null || c.price > filters.priceMax)) return false;
-      return true;
-    });
+  function matchesFilters(card) {
+    if (!matchesColorFilter(card)) return false;
+    if (filters.favsOnly && !favorites.has(card.id)) return false;
+    if (filters.search && !card.name.toLowerCase().includes(filters.search)) return false;
+    if (filters.priceMin !== null && (card.price === null || card.price < filters.priceMin)) return false;
+    if (filters.priceMax !== null && (card.price === null || card.price > filters.priceMax)) return false;
+    return true;
+  }
+
+  function sortedCards() {
+    const list = [...cards];
     const noPrice = v => v.price === null;
     switch (filters.sort) {
       case "price-asc":
@@ -399,51 +490,37 @@
     return list;
   }
 
-  function formatPrice(card) {
-    if (card.price === null) return '<span class="price unknown">kein Preis verfügbar</span>';
-    const eur = card.price.toFixed(2).replace(".", ",") + " €";
-    const note = card.foilOnly ? " <small>(Foil)</small>" : " <small>ab</small>";
-    return '<span class="price">' + eur + note + "</span>";
+  function updateStatus(visibleCount) {
+    statusBar.textContent = visibleCount + " von " + cards.length + " Karten · " + favorites.size + " Favoriten";
   }
 
-  function render() {
-    const list = visibleCards();
-    const content = document.getElementById("content");
-    document.getElementById("status").textContent =
-      list.length + " von " + cards.length + " Karten · " + favorites.size + " Favoriten";
-
-    if (!list.length) {
-      content.innerHTML = '<div class="loader">Keine Karten gefunden – Filter anpassen.</div>';
-      return;
+  // Sichtbarkeit & Reihenfolge per CSS steuern statt das DOM neu zu bauen –
+  // so werden die <img>-Elemente nie neu erzeugt.
+  function applyFilters() {
+    let visible = 0;
+    for (const [i, card] of sortedCards().entries()) {
+      const el = cardEls.get(card.id);
+      if (!el) continue;
+      const show = matchesFilters(card);
+      el.classList.toggle("filtered-out", !show);
+      el.style.order = i;
+      if (show) visible++;
     }
+    emptyNote.hidden = visible > 0 || cards.length === 0;
+    updateStatus(visible);
+  }
 
-    const grid = document.createElement("div");
-    grid.className = "grid";
-    for (const card of list) {
-      const el = document.createElement("div");
-      el.className = "card";
-      el.innerHTML =
-        '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener">' +
-          '<img loading="lazy" src="' + card.image + '" alt="' + card.name.replace(/"/g, "&quot;") + '">' +
-        "</a>" +
-        '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
-          (favorites.has(card.id) ? "★" : "☆") +
-        "</button>" +
-        '<div class="info">' +
-          '<div class="name">' + card.name + "</div>" +
-          '<div class="meta">#' + card.number + ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
-            (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
-          formatPrice(card) +
-        "</div>";
-      el.querySelector(".fav-btn").addEventListener("click", () => {
-        if (favorites.has(card.id)) favorites.delete(card.id);
-        else favorites.add(card.id);
-        saveFavorites();
-        render();
-      });
-      grid.appendChild(el);
+  function addBatch(batch) {
+    const frag = document.createDocumentFragment();
+    for (const card of batch) {
+      if (cardEls.has(card.id)) continue;
+      cards.push(card);
+      const el = buildCardEl(card);
+      cardEls.set(card.id, el);
+      frag.appendChild(el);
     }
-    content.replaceChildren(grid);
+    grid.appendChild(frag);
+    applyFilters();
   }
 
   // --- Steuerelemente verdrahten ---
@@ -452,29 +529,29 @@
       const c = btn.dataset.color;
       if (filters.colors.has(c)) { filters.colors.delete(c); btn.classList.remove("active"); }
       else { filters.colors.add(c); btn.classList.add("active"); }
-      render();
+      applyFilters();
     });
   });
   document.getElementById("price-min").addEventListener("input", e => {
     filters.priceMin = e.target.value === "" ? null : parseFloat(e.target.value);
-    render();
+    applyFilters();
   });
   document.getElementById("price-max").addEventListener("input", e => {
     filters.priceMax = e.target.value === "" ? null : parseFloat(e.target.value);
-    render();
+    applyFilters();
   });
   document.getElementById("sort").addEventListener("change", e => {
     filters.sort = e.target.value;
-    render();
+    applyFilters();
   });
   document.getElementById("search").addEventListener("input", e => {
     filters.search = e.target.value.trim().toLowerCase();
-    render();
+    applyFilters();
   });
   document.getElementById("fav-filter").addEventListener("click", e => {
     filters.favsOnly = !filters.favsOnly;
     e.currentTarget.classList.toggle("active", filters.favsOnly);
-    render();
+    applyFilters();
   });
   document.getElementById("reset").addEventListener("click", () => {
     filters.colors.clear();
@@ -488,15 +565,18 @@
     document.getElementById("sort").value = "number";
     document.getElementById("search").value = "";
     document.getElementById("fav-filter").classList.remove("active");
-    render();
+    applyFilters();
   });
 
-  fetchAllCards()
-    .then(data => { cards = data; render(); })
+  loadCards(addBatch)
+    .then(() => { progress.hidden = true; })
     .catch(err => {
-      document.getElementById("content").innerHTML =
-        '<div class="error-box">Karten konnten nicht geladen werden:<br><strong>' + err.message +
-        "</strong><br><button onclick=\"location.reload()\">Erneut versuchen</button></div>";
+      progress.hidden = true;
+      const box = document.createElement("div");
+      box.className = "error-box";
+      box.innerHTML = "Karten konnten nicht geladen werden:<br><strong>" + err.message +
+        "</strong><br><button onclick=\"location.reload()\">Erneut versuchen</button>";
+      grid.before(box);
     });
 })();
 </script>
