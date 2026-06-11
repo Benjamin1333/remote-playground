@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-      - claude/magic-card-tracker-dhs5aq
+  schedule:
+    # Täglich nach dem Cardmarket-Price-Guide-Update (erstellt ~02:45 MEZ)
+    - cron: "30 5 * * *"
   workflow_dispatch:
 
 permissions:
@@ -28,6 +30,8 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
+      - name: Build Cardmarket prices
+        run: python3 scripts/build_prices.py _site/prices.json
       - uses: actions/configure-pages@v5
         with:
           enablement: true

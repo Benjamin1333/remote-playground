@@ -203,14 +203,25 @@
     font-size: 0.75rem;
     color: var(--muted);
   }
-  .card .price {
+  .card .price-line {
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .card .price {
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--accent);
   }
   .card .price.unknown { color: var(--muted); font-weight: 400; }
-  .card .price small { color: var(--muted); font-weight: 400; }
+  .card .price small { color: var(--muted); font-weight: 400; font-size: 0.74rem; }
+  .card .cm-link {
+    font-size: 0.74rem;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .card .cm-link:hover { color: var(--gold); text-decoration: underline; }
 
   .fav-btn {
     position: absolute;
@@ -319,7 +330,7 @@
   const SET_CODE = "tmt";
   const API_URL = "https://api.scryfall.com/cards/search?order=set&unique=prints&include_extras=true&include_variations=true&q=" +
     encodeURIComponent("e:" + SET_CODE);
-  const CACHE_KEY = "tmt-card-cache-v1";
+  const CACHE_KEY = "tmt-card-cache-v2";
   const CACHE_TTL = 60 * 60 * 1000; // 1 Stunde, um die Scryfall-API zu schonen
   const FAV_KEY = "tmt-favorites-v1";
 
@@ -362,9 +373,48 @@
       imageSmall: img.small || "",
       image: img.normal || img.large || img.small || "",
       url: card.scryfall_uri,
+      cmId: card.cardmarket_id || null,
+      cmUrl: (card.purchase_uris && card.purchase_uris.cardmarket) || "",
       price: cheapestPrice(card.prices || {}),
-      foilOnly: !(card.prices && card.prices.eur) && !!(card.prices && card.prices.eur_foil)
+      foilOnly: !(card.prices && card.prices.eur) && !!(card.prices && card.prices.eur_foil),
+      trend: null
     };
+  }
+
+  // Cardmarket-Preise (täglich generierte prices.json aus dem offiziellen
+  // Price Guide). Liegt neben der Seite; lokal ohne Server greift der
+  // Scryfall-Fallback.
+  let cmInfo = null;
+  async function loadCardmarketPrices() {
+    try {
+      const res = await fetch("prices.json", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !data.prices) return;
+      cmInfo = { updatedAt: data.updatedAt };
+      for (const card of cards) applyCardmarketPrice(card, data.prices);
+      // Später eintreffende Karten (zweite Scryfall-Seite) ebenfalls versorgen
+      pendingCmPrices = data.prices;
+      applyFilters();
+    } catch (e) { /* nicht erreichbar -> Scryfall-Preise behalten */ }
+  }
+  let pendingCmPrices = null;
+
+  function applyCardmarketPrice(card, prices) {
+    const p = card.cmId !== null ? prices[String(card.cmId)] : null;
+    if (!p) return;
+    const lows = [
+      { v: p.low, foil: false },
+      { v: p.lowFoil, foil: true }
+    ].filter(x => typeof x.v === "number");
+    if (!lows.length) return;
+    const best = lows.reduce((a, b) => (b.v < a.v ? b : a));
+    card.price = best.v;
+    card.foilOnly = best.foil;
+    card.trend = typeof p.trend === "number" ? p.trend : null;
+    card.isCm = true;
+    const el = cardEls.get(card.id);
+    if (el) el.querySelector(".price-line").innerHTML = priceHtml(card);
   }
 
   function setProgress(loaded, total) {
@@ -404,11 +454,24 @@
     } catch (e) { /* localStorage voll -> ohne Cache weiter */ }
   }
 
-  function formatPrice(card) {
-    if (card.price === null) return '<span class="price unknown">kein Preis verfügbar</span>';
-    const eur = card.price.toFixed(2).replace(".", ",") + " €";
-    const note = card.foilOnly ? " <small>(Foil)</small>" : " <small>ab</small>";
-    return '<span class="price">' + eur + note + "</span>";
+  function priceHtml(card) {
+    let html;
+    if (card.price === null) {
+      html = '<span class="price unknown">kein Preis verfügbar</span>';
+    } else {
+      const eur = card.price.toFixed(2).replace(".", ",") + " €";
+      const prefix = card.isCm ? "ab " : "";
+      const foil = card.foilOnly ? " <small>(Foil)</small>" : "";
+      const trend = card.trend !== null
+        ? " <small>· Trend " + card.trend.toFixed(2).replace(".", ",") + " €</small>"
+        : "";
+      html = '<span class="price">' + prefix + eur + foil + trend + "</span>";
+    }
+    if (card.cmUrl) {
+      html += '<a class="cm-link" href="' + card.cmUrl + '" target="_blank" rel="noopener"' +
+        ' title="Angebote auf Cardmarket ansehen (dort nach Sprache und Zustand filterbar)">Cardmarket ↗</a>';
+    }
+    return html;
   }
 
   function buildCardEl(card) {
@@ -429,7 +492,7 @@
         '<div class="name">' + card.name + "</div>" +
         '<div class="meta">#' + card.number + ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
           (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
-        formatPrice(card) +
+        '<div class="price-line">' + priceHtml(card) + "</div>" +
       "</div>";
     el.querySelector(".fav-btn").addEventListener("click", e => {
       const btn = e.currentTarget;
@@ -491,7 +554,13 @@
   }
 
   function updateStatus(visibleCount) {
-    statusBar.textContent = visibleCount + " von " + cards.length + " Karten · " + favorites.size + " Favoriten";
+    let text = visibleCount + " von " + cards.length + " Karten · " + favorites.size + " Favoriten";
+    if (cmInfo) {
+      text += " · Cardmarket-Preise: Stand " + new Date(cmInfo.updatedAt).toLocaleDateString("de-DE");
+    } else {
+      text += " · Preise: Scryfall (Cardmarket-Trend)";
+    }
+    statusBar.textContent = text;
   }
 
   // Sichtbarkeit & Reihenfolge per CSS steuern statt das DOM neu zu bauen –
@@ -518,6 +587,7 @@
       const el = buildCardEl(card);
       cardEls.set(card.id, el);
       frag.appendChild(el);
+      if (pendingCmPrices) applyCardmarketPrice(card, pendingCmPrices);
     }
     grid.appendChild(frag);
     applyFilters();
@@ -568,6 +638,7 @@
     applyFilters();
   });
 
+  loadCardmarketPrices();
   loadCards(addBatch)
     .then(() => { progress.hidden = true; })
     .catch(err => {
