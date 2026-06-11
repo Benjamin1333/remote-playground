@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TMNT – Magic: The Gathering Kartenübersicht</title>
+<title>MTG Kartenübersicht & Collections</title>
 <style>
   :root {
     --bg: #101418;
@@ -34,6 +34,35 @@
   }
   header h1 span { color: var(--accent); }
   header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  .collection-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 24px 0;
+  }
+  .collection-bar .label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+  }
+  .collection-bar select { max-width: 320px; }
+  .bar-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .bar-btn:hover { border-color: var(--accent); }
+  .bar-btn.primary { border-color: var(--accent-2); color: var(--accent); }
+  .bar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .bar-btn:disabled:hover { border-color: var(--border); }
 
   .controls {
     position: sticky;
@@ -86,17 +115,18 @@
   .color-btn[data-color="M"] { background: linear-gradient(135deg, #f2c14e, #c98a2e); color: #4d3505; }
   .color-btn[data-color="C"] { background: #c7c1b8; color: #4a463d; }
 
-  input[type="number"], input[type="search"], select {
+  input[type="number"], input[type="search"], input[type="text"], select, textarea {
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 8px;
     padding: 7px 10px;
     font-size: 0.9rem;
+    font-family: inherit;
   }
   input[type="number"] { width: 84px; }
   input[type="search"] { width: 200px; }
-  input:focus, select:focus { outline: 1px solid var(--accent); }
+  input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
   .fav-filter-btn {
     background: var(--panel-2);
@@ -243,6 +273,19 @@
   .fav-btn:hover { transform: scale(1.15); color: var(--gold); }
   .fav-btn.faved { color: var(--gold); }
 
+  .qty-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(10,13,16,0.78);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 8px;
+    padding: 3px 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
   .rarity-C { color: #c7c1b8; }
   .rarity-U { color: #b3c7d1; }
   .rarity-R { color: #e0b860; }
@@ -271,14 +314,72 @@
     border-radius: 8px;
     cursor: pointer;
   }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    z-index: 100;
+    overflow-y: auto;
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    width: 100%;
+    max-width: 620px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal h2 { margin: 0; font-size: 1.2rem; }
+  .modal label { font-size: 0.82rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  .modal .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .modal .row > div { flex: 1; min-width: 160px; }
+  .modal input[type="text"] { width: 100%; }
+  .modal textarea {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .modal .hint { font-size: 0.76rem; color: var(--muted); line-height: 1.5; }
+  .modal .buttons { display: flex; gap: 10px; justify-content: flex-end; }
+  .modal .status {
+    font-size: 0.82rem;
+    color: var(--muted);
+    white-space: pre-wrap;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .modal .status .warn { color: #e8a87c; }
+  .modal .status .ok { color: var(--accent); }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>🐢 Teenage Mutant Ninja Turtles <span>× Magic: The Gathering</span></h1>
-  <p>Alle 320 Karten des Sets (TMT) · Preise &amp; Bilder live von Scryfall · günstigster Cardmarket-Preis</p>
+  <h1>🃏 Magic: The Gathering <span>Kartenübersicht & Collections</span></h1>
+  <p>Eigene Collections aus Kartenlisten · Bilder &amp; Daten von Scryfall · Cardmarket-Preise</p>
 </header>
+
+<div class="collection-bar">
+  <span class="label">Collection</span>
+  <select id="collection-select"></select>
+  <button class="bar-btn primary" id="col-new">+ Neue Collection</button>
+  <button class="bar-btn" id="col-export" title="Aktuelle Collection als JSON-Datei sichern">Export</button>
+  <button class="bar-btn" id="col-import-btn" title="Collection aus JSON-Datei laden">Import</button>
+  <input type="file" id="col-import" accept="application/json,.json" hidden>
+  <button class="bar-btn" id="col-delete">Löschen</button>
+</div>
 
 <div class="controls">
   <div class="control-group">
@@ -325,32 +426,103 @@
 <div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
 <div class="grid" id="grid"></div>
 
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal">
+    <h2>Neue Collection anlegen</h2>
+    <div class="row">
+      <div>
+        <label for="col-name">Name der Collection</label>
+        <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
+      </div>
+      <div>
+        <label for="col-set">Set-Code (optional, für Listen mit Sammlernummern)</label>
+        <input type="text" id="col-set" placeholder="z.B. tmt" maxlength="6">
+      </div>
+    </div>
+    <div>
+      <label for="col-list">Kartenliste (eine Karte pro Zeile)</label>
+      <textarea id="col-list" placeholder="4 Lightning Bolt
+1 Leonardo, Sewer Samurai (TMT) 17
+Counterspell
+0017 Leonardo, Sewer Samurai M   ← mit Set-Code"></textarea>
+      <p class="hint">
+        Unterstützte Formate: <code>4 Name</code>, <code>4x Name</code>, nur der Kartenname,
+        Arena/Moxfield-Export <code>1 Name (SET) 123</code> sowie Set-Listen mit Sammlernummer
+        (<code>0017 Name …</code> – dann oben den Set-Code angeben).
+        Markdown-Checkboxen (<code>- [x]</code>) und Kommentarzeilen (<code>#</code>, <code>//</code>) werden ignoriert.
+      </p>
+    </div>
+    <div class="status" id="col-status"></div>
+    <div class="buttons">
+      <button class="bar-btn" id="col-cancel">Abbrechen</button>
+      <button class="bar-btn primary" id="col-create">Collection erstellen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
+  // ===== Konstanten =====
   const SET_CODE = "tmt";
-  const API_URL = "https://api.scryfall.com/cards/search?order=set&unique=prints&include_extras=true&include_variations=true&q=" +
+  const SET_API_URL = "https://api.scryfall.com/cards/search?order=set&unique=prints&include_extras=true&include_variations=true&q=" +
     encodeURIComponent("e:" + SET_CODE);
-  const CACHE_KEY = "tmt-card-cache-v2";
+  const COLLECTION_API = "https://api.scryfall.com/cards/collection";
+  const FUZZY_API = "https://api.scryfall.com/cards/named?fuzzy=";
+
+  const SET_CACHE_KEY = "tmt-card-cache-v2";
   const CACHE_TTL = 60 * 60 * 1000; // 1 Stunde, um die Scryfall-API zu schonen
   const FAV_KEY = "tmt-favorites-v1";
+  const COLLECTIONS_KEY = "mtg-collections-v1";
+  const CARD_CACHE_KEY = "mtg-card-cache-v1";
+  const ACTIVE_KEY = "mtg-active-collection-v1";
+  const TMT_ID = "tmt-set";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
 
+  // ===== Zustand =====
   let cards = [];
-  const cardEls = new Map(); // card.id -> DOM-Element (wird nur einmal gebaut)
+  const cardEls = new Map(); // card.id -> DOM-Element (pro Collection-Ansicht)
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
   const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false };
 
+  let collections = loadJson(COLLECTIONS_KEY, []);
+  let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
+  let activeId = localStorage.getItem(ACTIVE_KEY) || TMT_ID;
+  if (activeId !== TMT_ID && !collections.some(c => c.id === activeId)) activeId = TMT_ID;
+  let loadToken = 0; // entwertet laufende Ladevorgänge beim Collection-Wechsel
+
+  let cmInfo = null;
+  let pendingCmPrices = null;
+
+  // ===== DOM =====
   const grid = document.getElementById("grid");
   const statusBar = document.getElementById("status");
   const emptyNote = document.getElementById("empty-note");
   const progress = document.getElementById("progress");
   const progressFill = document.getElementById("progress-fill");
   const progressText = document.getElementById("progress-text");
+  const colSelect = document.getElementById("collection-select");
+  const modalOverlay = document.getElementById("modal-overlay");
+  const colStatus = document.getElementById("col-status");
 
-  function saveFavorites() {
-    localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+  // ===== Hilfsfunktionen =====
+  function loadJson(key, fallback) {
+    try {
+      const v = JSON.parse(localStorage.getItem(key));
+      return v === null || v === undefined ? fallback : v;
+    } catch (e) { return fallback; }
+  }
+  function saveJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); }
+    catch (e) { alert("Speichern fehlgeschlagen – der Browser-Speicher ist voll."); }
+  }
+  function saveFavorites() { saveJson(FAV_KEY, [...favorites]); }
+  function saveCollections() { saveJson(COLLECTIONS_KEY, collections); }
+  function saveCardCache() { saveJson(CARD_CACHE_KEY, cardCache); }
+
+  function normName(s) {
+    return s.toLowerCase().replace(/’/g, "'").trim();
   }
 
   function cheapestPrice(prices) {
@@ -365,6 +537,7 @@
     return {
       id: card.id,
       name: card.name,
+      set: card.set,
       number: card.collector_number,
       numSort: parseInt(card.collector_number, 10) || 0,
       colors: card.colors !== undefined ? card.colors
@@ -381,10 +554,11 @@
     };
   }
 
-  // Cardmarket-Preise (täglich generierte prices.json aus dem offiziellen
-  // Price Guide). Liegt neben der Seite; lokal ohne Server greift der
-  // Scryfall-Fallback.
-  let cmInfo = null;
+  function formatEur(v) {
+    return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  }
+
+  // ===== Cardmarket-Preise (prices.json aus dem offiziellen Price Guide) =====
   async function loadCardmarketPrices() {
     try {
       const res = await fetch("prices.json", { cache: "no-store" });
@@ -392,13 +566,11 @@
       const data = await res.json();
       if (!data || !data.prices) return;
       cmInfo = { updatedAt: data.updatedAt };
-      for (const card of cards) applyCardmarketPrice(card, data.prices);
-      // Später eintreffende Karten (zweite Scryfall-Seite) ebenfalls versorgen
       pendingCmPrices = data.prices;
+      for (const card of cards) applyCardmarketPrice(card, data.prices);
       applyFilters();
     } catch (e) { /* nicht erreichbar -> Scryfall-Preise behalten */ }
   }
-  let pendingCmPrices = null;
 
   function applyCardmarketPrice(card, prices) {
     const p = card.cmId !== null ? prices[String(card.cmId)] : null;
@@ -417,55 +589,390 @@
     if (el) el.querySelector(".price-line").innerHTML = priceHtml(card);
   }
 
+  // ===== Laden: TMNT-Set =====
   function setProgress(loaded, total) {
     const pct = total ? Math.round((loaded / total) * 100) : 0;
     progressFill.style.width = pct + "%";
     progressText.textContent = "Lade Kartendaten: " + loaded + " / " + (total || "?") + " (" + pct + " %)";
   }
+  function showProgress() {
+    progress.hidden = false;
+    progressFill.style.width = "0%";
+    progressText.textContent = "Verbinde mit Scryfall …";
+  }
 
-  // Lädt die Karten seitenweise und ruft onBatch nach jeder Seite auf,
-  // damit die ersten Karten sofort sichtbar sind.
-  async function loadCards(onBatch) {
-    const cached = localStorage.getItem(CACHE_KEY);
+  async function loadSetCards(token) {
+    const cached = localStorage.getItem(SET_CACHE_KEY);
     if (cached) {
       try {
         const { time, data } = JSON.parse(cached);
         if (Date.now() - time < CACHE_TTL && Array.isArray(data) && data.length) {
           setProgress(data.length, data.length);
-          onBatch(data);
+          addBatch(data, token);
           return;
         }
       } catch (e) { /* Cache defekt -> neu laden */ }
     }
-    let url = API_URL;
+    let url = SET_API_URL;
     const all = [];
     while (url) {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const page = await res.json();
+      if (token !== loadToken) return;
       const batch = page.data.map(simplify);
       all.push(...batch);
       setProgress(all.length, page.total_cards || all.length);
-      onBatch(batch);
+      addBatch(batch, token);
       url = page.has_more ? page.next_page : null;
     }
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: all }));
+      localStorage.setItem(SET_CACHE_KEY, JSON.stringify({ time: Date.now(), data: all }));
     } catch (e) { /* localStorage voll -> ohne Cache weiter */ }
   }
 
+  // ===== Laden: eigene Collection =====
+  async function loadCollectionCards(col, token) {
+    const have = [];
+    const missing = [];
+    for (const entry of col.entries) {
+      const cached = cardCache[entry.id];
+      if (cached) have.push({ ...cached, qty: entry.qty });
+      else missing.push(entry);
+    }
+    setProgress(have.length, col.entries.length);
+    if (have.length) addBatch(have, token);
+    for (let i = 0; i < missing.length; i += 75) {
+      const slice = missing.slice(i, i + 75);
+      const res = await fetch(COLLECTION_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+      });
+      if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
+      const json = await res.json();
+      if (token !== loadToken) return;
+      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
+      const batch = json.data.map(c => {
+        const s = simplify(c);
+        cardCache[c.id] = s;
+        return { ...s, qty: qtyById.get(c.id) || 1 };
+      });
+      saveCardCache();
+      addBatch(batch, token);
+      setProgress(Math.min(have.length + i + 75, col.entries.length), col.entries.length);
+    }
+  }
+
+  // ===== Collection-Verwaltung =====
+  function currentCollection() {
+    return collections.find(c => c.id === activeId) || null;
+  }
+
+  function renderCollectionSelect() {
+    colSelect.innerHTML = "";
+    const optTmt = document.createElement("option");
+    optTmt.value = TMT_ID;
+    optTmt.textContent = "🐢 TMNT-Set (alle 320 Karten)";
+    colSelect.appendChild(optTmt);
+    for (const col of collections) {
+      const opt = document.createElement("option");
+      opt.value = col.id;
+      opt.textContent = col.name + " (" + col.entries.length + " Karten)";
+      colSelect.appendChild(opt);
+    }
+    colSelect.value = activeId;
+    document.getElementById("col-delete").disabled = activeId === TMT_ID;
+  }
+
+  function switchCollection(id) {
+    activeId = id;
+    localStorage.setItem(ACTIVE_KEY, id);
+    renderCollectionSelect();
+    loadToken++;
+    const token = loadToken;
+    cards = [];
+    cardEls.clear();
+    grid.replaceChildren();
+    emptyNote.hidden = true;
+    showProgress();
+    updateStatus(0, 0);
+    const job = id === TMT_ID
+      ? loadSetCards(token)
+      : loadCollectionCards(currentCollection(), token);
+    job
+      .then(() => { if (token === loadToken) progress.hidden = true; })
+      .catch(err => {
+        if (token !== loadToken) return;
+        progress.hidden = true;
+        const box = document.createElement("div");
+        box.className = "error-box";
+        box.innerHTML = "Karten konnten nicht geladen werden:<br><strong>" + err.message +
+          "</strong><br><button onclick=\"location.reload()\">Erneut versuchen</button>";
+        grid.before(box);
+      });
+  }
+
+  function deleteCurrentCollection() {
+    const col = currentCollection();
+    if (!col) return;
+    if (!confirm('Collection "' + col.name + '" wirklich löschen?')) return;
+    collections = collections.filter(c => c.id !== col.id);
+    saveCollections();
+    switchCollection(TMT_ID);
+  }
+
+  function exportCurrentCollection() {
+    const col = currentCollection();
+    const name = col ? col.name : "TMNT-Set";
+    const data = {
+      format: "mtg-collection-v1",
+      name: name,
+      exportedAt: new Date().toISOString(),
+      cards: cards.map(c => ({ qty: c.qty || 1, card: { ...c, qty: undefined } }))
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[^\wäöüÄÖÜß -]/g, "_") + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importCollectionFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.format !== "mtg-collection-v1" || !Array.isArray(data.cards)) {
+          throw new Error("Kein gültiges Collection-Export-Format");
+        }
+        const entries = [];
+        for (const item of data.cards) {
+          if (!item.card || !item.card.id) continue;
+          cardCache[item.card.id] = item.card;
+          entries.push({ id: item.card.id, qty: item.qty || 1 });
+        }
+        if (!entries.length) throw new Error("Die Datei enthält keine Karten");
+        saveCardCache();
+        const col = {
+          id: "c" + Date.now().toString(36),
+          name: data.name || file.name.replace(/\.json$/i, ""),
+          createdAt: new Date().toISOString(),
+          entries: entries
+        };
+        collections.push(col);
+        saveCollections();
+        switchCollection(col.id);
+      } catch (e) {
+        alert("Import fehlgeschlagen: " + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ===== Listen-Parser =====
+  function cleanName(s) {
+    return s
+      .replace(/\s*[*([]F[*)\]]\s*$/i, "")   // Foil-Markierungen *F* (F) [F]
+      .replace(/\s+#.*$/, "")                  // Kommentare nach #
+      .trim();
+  }
+
+  function parseList(text, setHint) {
+    const merged = new Map(); // key -> {qty, ident, raw}
+    const errors = [];
+    function add(key, qty, ident, raw) {
+      const existing = merged.get(key);
+      if (existing) existing.qty += qty;
+      else merged.set(key, { qty, ident, raw });
+    }
+    for (const rawLine of text.split("\n")) {
+      let line = rawLine.trim();
+      if (!line || line.startsWith("//") || line.startsWith("#")) continue;
+      line = line.replace(/^[-*]\s*\[[ xX]\]\s*/, "").replace(/^[-*]\s+/, "").trim();
+      if (!line) continue;
+      let m;
+      // Arena/Moxfield: "1 Name (SET) 123" (Sammlernummer optional)
+      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([A-Za-z0-9★†-]+)\s*.*$/))) {
+        const set = m[3].toLowerCase();
+        add("n:" + set + ":" + m[4], parseInt(m[1], 10), { set: set, collector_number: m[4] }, rawLine);
+        continue;
+      }
+      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s*$/))) {
+        const set = m[3].toLowerCase();
+        const name = cleanName(m[2]);
+        add("m:" + normName(name) + "|" + set, parseInt(m[1], 10), { name: name, set: set }, rawLine);
+        continue;
+      }
+      // Set-Liste mit Sammlernummer: "0017 Name ..." (Set-Code nötig)
+      if ((m = line.match(/^(\d{1,4})\s+(.+)$/)) && (m[1].length >= 3 || m[1][0] === "0")) {
+        if (setHint) {
+          const num = String(parseInt(m[1], 10));
+          add("n:" + setHint + ":" + num, 1, { set: setHint, collector_number: num }, rawLine);
+        } else {
+          errors.push(rawLine + "   → Sammlernummer erkannt, aber kein Set-Code angegeben");
+        }
+        continue;
+      }
+      // "4x Name" / "4 Name"
+      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+)$/))) {
+        const name = cleanName(m[2]);
+        add("m:" + normName(name), parseInt(m[1], 10), { name: name }, rawLine);
+        continue;
+      }
+      // Nur der Kartenname
+      const name = cleanName(line);
+      if (name) add("m:" + normName(name), 1, { name: name }, rawLine);
+    }
+    return { entries: [...merged.values()], errors };
+  }
+
+  // ===== Auflösung über Scryfall =====
+  async function resolveEntries(entries, onStatus) {
+    const found = [];
+    const unresolved = [];
+    const fuzzyQueue = [];
+
+    for (let i = 0; i < entries.length; i += 75) {
+      const batch = entries.slice(i, i + 75);
+      onStatus("Löse Karten auf … " + Math.min(i + 75, entries.length) + " / " + entries.length);
+      const res = await fetch(COLLECTION_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: batch.map(e => e.ident) })
+      });
+      if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
+      const json = await res.json();
+
+      const bySetNum = new Map();
+      const byName = new Map();
+      for (const e of batch) {
+        if (e.ident.collector_number) {
+          bySetNum.set(e.ident.set + ":" + e.ident.collector_number.toLowerCase(), e);
+        } else {
+          const n = normName(e.ident.name);
+          if (e.ident.set) byName.set(n + "|" + e.ident.set, e);
+          byName.set(n, e);
+        }
+      }
+      const matched = new Set();
+      for (const card of json.data) {
+        let e = bySetNum.get(card.set + ":" + card.collector_number.toLowerCase());
+        if (!e || matched.has(e)) {
+          e = null;
+          const names = [normName(card.name), normName(card.name.split(" // ")[0])];
+          for (const n of names) {
+            const cand = byName.get(n + "|" + card.set) || byName.get(n);
+            if (cand && !matched.has(cand)) { e = cand; break; }
+          }
+        }
+        if (e && !matched.has(e)) {
+          matched.add(e);
+          found.push({ card: simplify(card), qty: e.qty });
+        }
+      }
+      for (const e of batch) {
+        if (matched.has(e)) continue;
+        if (e.ident.name) fuzzyQueue.push(e);
+        else unresolved.push(e.raw);
+      }
+    }
+
+    for (const e of fuzzyQueue) {
+      onStatus("Unscharfe Suche: " + e.ident.name + " …");
+      try {
+        const res = await fetch(FUZZY_API + encodeURIComponent(e.ident.name));
+        if (res.ok) found.push({ card: simplify(await res.json()), qty: e.qty });
+        else unresolved.push(e.raw);
+      } catch (err) { unresolved.push(e.raw); }
+      await new Promise(r => setTimeout(r, 120)); // API schonen
+    }
+    return { found, unresolved };
+  }
+
+  // ===== Modal: neue Collection =====
+  function openModal() {
+    document.getElementById("col-name").value = "";
+    document.getElementById("col-set").value = "";
+    document.getElementById("col-list").value = "";
+    colStatus.innerHTML = "";
+    document.getElementById("col-create").disabled = false;
+    modalOverlay.hidden = false;
+    document.getElementById("col-name").focus();
+  }
+  function closeModal() { modalOverlay.hidden = true; }
+
+  async function handleCreateCollection() {
+    const name = document.getElementById("col-name").value.trim();
+    const setHint = document.getElementById("col-set").value.trim().toLowerCase();
+    const text = document.getElementById("col-list").value;
+    if (!name) { colStatus.innerHTML = '<span class="warn">Bitte einen Namen angeben.</span>'; return; }
+    if (!text.trim()) { colStatus.innerHTML = '<span class="warn">Bitte eine Kartenliste einfügen.</span>'; return; }
+
+    const { entries, errors } = parseList(text, setHint || null);
+    if (!entries.length) {
+      colStatus.innerHTML = '<span class="warn">Keine gültigen Zeilen erkannt.</span>' +
+        (errors.length ? "\n" + errors.join("\n") : "");
+      return;
+    }
+
+    const createBtn = document.getElementById("col-create");
+    createBtn.disabled = true;
+    try {
+      const { found, unresolved } = await resolveEntries(entries, t => { colStatus.textContent = t; });
+      if (!found.length) {
+        colStatus.innerHTML = '<span class="warn">Keine der Karten konnte aufgelöst werden.</span>\n' +
+          unresolved.concat(errors).join("\n");
+        createBtn.disabled = false;
+        return;
+      }
+      // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
+      const entryById = new Map();
+      for (const f of found) {
+        cardCache[f.card.id] = f.card;
+        const existing = entryById.get(f.card.id);
+        if (existing) existing.qty += f.qty;
+        else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+      }
+      saveCardCache();
+      const col = {
+        id: "c" + Date.now().toString(36),
+        name: name,
+        createdAt: new Date().toISOString(),
+        entries: [...entryById.values()]
+      };
+      collections.push(col);
+      saveCollections();
+      switchCollection(col.id);
+
+      const problems = unresolved.concat(errors);
+      if (problems.length) {
+        colStatus.innerHTML = '<span class="ok">' + col.entries.length +
+          ' Karten übernommen.</span>\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
+          problems.join("\n");
+        createBtn.disabled = false;
+      } else {
+        closeModal();
+      }
+    } catch (err) {
+      colStatus.innerHTML = '<span class="warn">Fehler: ' + err.message + "</span>";
+      createBtn.disabled = false;
+    }
+  }
+
+  // ===== Darstellung =====
   function priceHtml(card) {
     let html;
     if (card.price === null) {
       html = '<span class="price unknown">kein Preis verfügbar</span>';
     } else {
-      const eur = card.price.toFixed(2).replace(".", ",") + " €";
       const prefix = card.isCm ? "ab " : "";
       const foil = card.foilOnly ? " <small>(Foil)</small>" : "";
       const trend = card.trend !== null
-        ? " <small>· Trend " + card.trend.toFixed(2).replace(".", ",") + " €</small>"
+        ? " <small>· Trend " + formatEur(card.trend) + "</small>"
         : "";
-      html = '<span class="price">' + prefix + eur + foil + trend + "</span>";
+      html = '<span class="price">' + prefix + formatEur(card.price) + foil + trend + "</span>";
     }
     if (card.cmUrl) {
       html += '<a class="cm-link" href="' + card.cmUrl + '" target="_blank" rel="noopener"' +
@@ -477,7 +984,6 @@
   function buildCardEl(card) {
     const el = document.createElement("div");
     el.className = "card";
-    // srcset: kleines Bild für kleine Kacheln/Mobil, normales für Desktop/Retina
     el.innerHTML =
       '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener">' +
         '<img loading="lazy" decoding="async"' +
@@ -485,12 +991,14 @@
         (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
         ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
       "</a>" +
+      (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "") +
       '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
         (favorites.has(card.id) ? "★" : "☆") +
       "</button>" +
       '<div class="info">' +
         '<div class="name">' + card.name + "</div>" +
-        '<div class="meta">#' + card.number + ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+        '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
+          ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
           (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
         '<div class="price-line">' + priceHtml(card) + "</div>" +
       "</div>";
@@ -506,9 +1014,7 @@
         btn.textContent = "★";
       }
       saveFavorites();
-      // Nur wenn der Favoriten-Filter aktiv ist, ändert sich die Sichtbarkeit
-      if (filters.favsOnly) applyFilters();
-      else updateStatus(grid.querySelectorAll(".card:not(.filtered-out)").length);
+      applyFilters();
     });
     return el;
   }
@@ -548,13 +1054,15 @@
         list.sort((a, b) => a.name.localeCompare(b.name, "de") || a.numSort - b.numSort);
         break;
       default:
-        list.sort((a, b) => a.numSort - b.numSort);
+        list.sort((a, b) => a.set.localeCompare(b.set) || a.numSort - b.numSort);
     }
     return list;
   }
 
-  function updateStatus(visibleCount) {
-    let text = visibleCount + " von " + cards.length + " Karten · " + favorites.size + " Favoriten";
+  function updateStatus(visibleCount, totalValue) {
+    let text = visibleCount + " von " + cards.length + " Karten";
+    if (totalValue > 0) text += " · Wert: " + formatEur(totalValue);
+    text += " · " + favorites.size + " Favoriten";
     if (cmInfo) {
       text += " · Cardmarket-Preise: Stand " + new Date(cmInfo.updatedAt).toLocaleDateString("de-DE");
     } else {
@@ -567,33 +1075,38 @@
   // so werden die <img>-Elemente nie neu erzeugt.
   function applyFilters() {
     let visible = 0;
+    let value = 0;
     for (const [i, card] of sortedCards().entries()) {
       const el = cardEls.get(card.id);
       if (!el) continue;
       const show = matchesFilters(card);
       el.classList.toggle("filtered-out", !show);
       el.style.order = i;
-      if (show) visible++;
+      if (show) {
+        visible++;
+        if (card.price !== null) value += card.price * (card.qty || 1);
+      }
     }
     emptyNote.hidden = visible > 0 || cards.length === 0;
-    updateStatus(visible);
+    updateStatus(visible, value);
   }
 
-  function addBatch(batch) {
+  function addBatch(batch, token) {
+    if (token !== loadToken) return;
     const frag = document.createDocumentFragment();
     for (const card of batch) {
       if (cardEls.has(card.id)) continue;
       cards.push(card);
+      if (pendingCmPrices) applyCardmarketPrice(card, pendingCmPrices);
       const el = buildCardEl(card);
       cardEls.set(card.id, el);
       frag.appendChild(el);
-      if (pendingCmPrices) applyCardmarketPrice(card, pendingCmPrices);
     }
     grid.appendChild(frag);
     applyFilters();
   }
 
-  // --- Steuerelemente verdrahten ---
+  // ===== Steuerelemente verdrahten =====
   document.querySelectorAll(".color-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const c = btn.dataset.color;
@@ -638,17 +1151,24 @@
     applyFilters();
   });
 
+  colSelect.addEventListener("change", e => switchCollection(e.target.value));
+  document.getElementById("col-new").addEventListener("click", openModal);
+  document.getElementById("col-cancel").addEventListener("click", closeModal);
+  document.getElementById("col-create").addEventListener("click", handleCreateCollection);
+  document.getElementById("col-delete").addEventListener("click", deleteCurrentCollection);
+  document.getElementById("col-export").addEventListener("click", exportCurrentCollection);
+  document.getElementById("col-import-btn").addEventListener("click", () => document.getElementById("col-import").click());
+  document.getElementById("col-import").addEventListener("change", e => {
+    if (e.target.files[0]) importCollectionFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  modalOverlay.addEventListener("click", e => { if (e.target === modalOverlay) closeModal(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !modalOverlay.hidden) closeModal(); });
+
+  // ===== Start =====
+  renderCollectionSelect();
   loadCardmarketPrices();
-  loadCards(addBatch)
-    .then(() => { progress.hidden = true; })
-    .catch(err => {
-      progress.hidden = true;
-      const box = document.createElement("div");
-      box.className = "error-box";
-      box.innerHTML = "Karten konnten nicht geladen werden:<br><strong>" + err.message +
-        "</strong><br><button onclick=\"location.reload()\">Erneut versuchen</button>";
-      grid.before(box);
-    });
+  switchCollection(activeId);
 })();
 </script>
 </body>
