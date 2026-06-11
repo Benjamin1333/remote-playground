@@ -463,19 +463,13 @@ Counterspell
 <script>
 (function () {
   // ===== Konstanten =====
-  const SET_CODE = "tmt";
-  const SET_API_URL = "https://api.scryfall.com/cards/search?order=set&unique=prints&include_extras=true&include_variations=true&q=" +
-    encodeURIComponent("e:" + SET_CODE);
   const COLLECTION_API = "https://api.scryfall.com/cards/collection";
   const FUZZY_API = "https://api.scryfall.com/cards/named?fuzzy=";
 
-  const SET_CACHE_KEY = "tmt-card-cache-v2";
-  const CACHE_TTL = 60 * 60 * 1000; // 1 Stunde, um die Scryfall-API zu schonen
   const FAV_KEY = "tmt-favorites-v1";
   const COLLECTIONS_KEY = "mtg-collections-v1";
   const CARD_CACHE_KEY = "mtg-card-cache-v1";
   const ACTIVE_KEY = "mtg-active-collection-v1";
-  const TMT_ID = "tmt-set";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
@@ -488,8 +482,10 @@ Counterspell
 
   let collections = loadJson(COLLECTIONS_KEY, []);
   let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
-  let activeId = localStorage.getItem(ACTIVE_KEY) || TMT_ID;
-  if (activeId !== TMT_ID && !collections.some(c => c.id === activeId)) activeId = TMT_ID;
+  let activeId = localStorage.getItem(ACTIVE_KEY);
+  if (!collections.some(c => c.id === activeId)) {
+    activeId = collections.length ? collections[0].id : null;
+  }
   let loadToken = 0; // entwertet laufende Ladevorgänge beim Collection-Wechsel
 
   let cmInfo = null;
@@ -589,7 +585,7 @@ Counterspell
     if (el) el.querySelector(".price-line").innerHTML = priceHtml(card);
   }
 
-  // ===== Laden: TMNT-Set =====
+  // ===== Laden: Collection =====
   function setProgress(loaded, total) {
     const pct = total ? Math.round((loaded / total) * 100) : 0;
     progressFill.style.width = pct + "%";
@@ -601,37 +597,6 @@ Counterspell
     progressText.textContent = "Verbinde mit Scryfall …";
   }
 
-  async function loadSetCards(token) {
-    const cached = localStorage.getItem(SET_CACHE_KEY);
-    if (cached) {
-      try {
-        const { time, data } = JSON.parse(cached);
-        if (Date.now() - time < CACHE_TTL && Array.isArray(data) && data.length) {
-          setProgress(data.length, data.length);
-          addBatch(data, token);
-          return;
-        }
-      } catch (e) { /* Cache defekt -> neu laden */ }
-    }
-    let url = SET_API_URL;
-    const all = [];
-    while (url) {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
-      const page = await res.json();
-      if (token !== loadToken) return;
-      const batch = page.data.map(simplify);
-      all.push(...batch);
-      setProgress(all.length, page.total_cards || all.length);
-      addBatch(batch, token);
-      url = page.has_more ? page.next_page : null;
-    }
-    try {
-      localStorage.setItem(SET_CACHE_KEY, JSON.stringify({ time: Date.now(), data: all }));
-    } catch (e) { /* localStorage voll -> ohne Cache weiter */ }
-  }
-
-  // ===== Laden: eigene Collection =====
   async function loadCollectionCards(col, token) {
     const have = [];
     const missing = [];
@@ -671,36 +636,47 @@ Counterspell
 
   function renderCollectionSelect() {
     colSelect.innerHTML = "";
-    const optTmt = document.createElement("option");
-    optTmt.value = TMT_ID;
-    optTmt.textContent = "🐢 TMNT-Set (alle 320 Karten)";
-    colSelect.appendChild(optTmt);
+    if (!collections.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "– noch keine Collection –";
+      colSelect.appendChild(opt);
+    }
     for (const col of collections) {
       const opt = document.createElement("option");
       opt.value = col.id;
       opt.textContent = col.name + " (" + col.entries.length + " Karten)";
       colSelect.appendChild(opt);
     }
-    colSelect.value = activeId;
-    document.getElementById("col-delete").disabled = activeId === TMT_ID;
+    colSelect.value = activeId || "";
+    const none = !currentCollection();
+    document.getElementById("col-delete").disabled = none;
+    document.getElementById("col-export").disabled = none;
   }
 
   function switchCollection(id) {
     activeId = id;
-    localStorage.setItem(ACTIVE_KEY, id);
+    if (id) localStorage.setItem(ACTIVE_KEY, id);
+    else localStorage.removeItem(ACTIVE_KEY);
     renderCollectionSelect();
     loadToken++;
     const token = loadToken;
     cards = [];
     cardEls.clear();
     grid.replaceChildren();
+    const col = currentCollection();
+    if (!col) {
+      progress.hidden = true;
+      emptyNote.textContent = "Noch keine Collection vorhanden – oben auf „+ Neue Collection“ klicken und eine Kartenliste einfügen.";
+      emptyNote.hidden = false;
+      updateStatus(0, 0);
+      return;
+    }
+    emptyNote.textContent = "Keine Karten gefunden – Filter anpassen.";
     emptyNote.hidden = true;
     showProgress();
     updateStatus(0, 0);
-    const job = id === TMT_ID
-      ? loadSetCards(token)
-      : loadCollectionCards(currentCollection(), token);
-    job
+    loadCollectionCards(col, token)
       .then(() => { if (token === loadToken) progress.hidden = true; })
       .catch(err => {
         if (token !== loadToken) return;
@@ -719,12 +695,13 @@ Counterspell
     if (!confirm('Collection "' + col.name + '" wirklich löschen?')) return;
     collections = collections.filter(c => c.id !== col.id);
     saveCollections();
-    switchCollection(TMT_ID);
+    switchCollection(collections.length ? collections[0].id : null);
   }
 
   function exportCurrentCollection() {
     const col = currentCollection();
-    const name = col ? col.name : "TMNT-Set";
+    if (!col) return;
+    const name = col.name;
     const data = {
       format: "mtg-collection-v1",
       name: name,
@@ -1151,7 +1128,7 @@ Counterspell
     applyFilters();
   });
 
-  colSelect.addEventListener("change", e => switchCollection(e.target.value));
+  colSelect.addEventListener("change", e => { if (e.target.value) switchCollection(e.target.value); });
   document.getElementById("col-new").addEventListener("click", openModal);
   document.getElementById("col-cancel").addEventListener("click", closeModal);
   document.getElementById("col-create").addEventListener("click", handleCreateCollection);
