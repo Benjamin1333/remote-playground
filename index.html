@@ -128,6 +128,22 @@
   input[type="search"] { width: 200px; }
   input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
+  .view-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .view-btn:hover { border-color: var(--accent); }
+  .view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 8px rgba(76,201,100,0.3);
+  }
+
   .fav-filter-btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -286,6 +302,30 @@
     font-weight: 700;
   }
 
+  /* Kompakte Galerieansicht: nur Kartenbilder, mehr Karten pro Zeile */
+  .grid.gallery {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .grid.gallery .card {
+    border-radius: 8px;
+    contain-intrinsic-size: 150px 209px;
+  }
+  .grid.gallery .card .info { display: none; }
+  .grid.gallery .fav-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 0.95rem;
+    top: 6px;
+    right: 6px;
+  }
+  .grid.gallery .qty-badge {
+    top: 6px;
+    left: 6px;
+    padding: 2px 6px;
+    font-size: 0.74rem;
+  }
+
   .rarity-C { color: #c7c1b8; }
   .rarity-U { color: #b3c7d1; }
   .rarity-R { color: #e0b860; }
@@ -399,6 +439,11 @@
     <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
   </div>
   <div class="control-group">
+    <span class="label">Ansicht</span>
+    <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
+    <button class="view-btn" id="view-gallery" title="Kompakte Galerie – nur Kartenbilder">▦ Galerie</button>
+  </div>
+  <div class="control-group">
     <span class="label">Sortierung</span>
     <select id="sort">
       <option value="number">Sammlernummer</option>
@@ -470,6 +515,7 @@ Counterspell
   const COLLECTIONS_KEY = "mtg-collections-v1";
   const CARD_CACHE_KEY = "mtg-card-cache-v1";
   const ACTIVE_KEY = "mtg-active-collection-v1";
+  const VIEW_KEY = "mtg-view-v1";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
@@ -962,7 +1008,8 @@ Counterspell
     const el = document.createElement("div");
     el.className = "card";
     el.innerHTML =
-      '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener">' +
+      '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
+        card.name.replace(/"/g, "&quot;") + '">' +
         '<img loading="lazy" decoding="async"' +
         ' src="' + card.image + '"' +
         (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
@@ -1128,6 +1175,23 @@ Counterspell
     applyFilters();
   });
 
+  let view = localStorage.getItem(VIEW_KEY) === "gallery" ? "gallery" : "detail";
+  function applyView() {
+    grid.classList.toggle("gallery", view === "gallery");
+    document.getElementById("view-detail").classList.toggle("active", view === "detail");
+    document.getElementById("view-gallery").classList.toggle("active", view === "gallery");
+  }
+  document.getElementById("view-detail").addEventListener("click", () => {
+    view = "detail";
+    localStorage.setItem(VIEW_KEY, view);
+    applyView();
+  });
+  document.getElementById("view-gallery").addEventListener("click", () => {
+    view = "gallery";
+    localStorage.setItem(VIEW_KEY, view);
+    applyView();
+  });
+
   colSelect.addEventListener("change", e => { if (e.target.value) switchCollection(e.target.value); });
   document.getElementById("col-new").addEventListener("click", openModal);
   document.getElementById("col-cancel").addEventListener("click", closeModal);
@@ -1143,6 +1207,7 @@ Counterspell
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !modalOverlay.hidden) closeModal(); });
 
   // ===== Start =====
+  applyView();
   renderCollectionSelect();
   loadCardmarketPrices();
   switchCollection(activeId);
