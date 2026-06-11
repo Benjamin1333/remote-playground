@@ -550,6 +550,7 @@
     <div class="more-wrap">
       <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
       <div class="more-menu" id="more-menu" hidden>
+        <button id="col-share">Link teilen</button>
         <button id="col-export">Export als JSON</button>
         <button id="col-import-btn">Import aus JSON</button>
         <button id="col-delete" class="danger">Collection löschen</button>
@@ -614,6 +615,13 @@
   </div>
   <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
 </div>
+
+<div class="compare-bar" id="share-bar" hidden>
+  <span class="cmp-title" id="share-title"></span>
+  <button class="bar-btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
+  <button class="bar-btn" id="share-close">Schließen</button>
+</div>
+
 <div class="progress-wrap" id="progress">
   <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
   <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
@@ -892,6 +900,132 @@ Counterspell
   const compareBar = document.getElementById("compare-bar");
   const compareOverlay = document.getElementById("compare-overlay");
 
+  // ===== Collection per Link teilen =====
+  // Format: "#share=" + ("1."|"0.") + base64url(deflate("Name\nset:nr:anz;set:nr:anz;…"))
+  // "1." = deflate-komprimiert, "0." = unkomprimiert (Fallback für alte Browser)
+  let sharedView = null; // { name, found } oder null
+  const shareBar = document.getElementById("share-bar");
+
+  function b64urlEncode(bytes) {
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function b64urlDecode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  }
+  async function compressText(text) {
+    const bytes = new TextEncoder().encode(text);
+    if (typeof CompressionStream === "undefined") return "0." + b64urlEncode(bytes);
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return "1." + b64urlEncode(new Uint8Array(await new Response(stream).arrayBuffer()));
+  }
+  async function decompressText(s) {
+    const bytes = b64urlDecode(s.slice(2));
+    if (s.startsWith("0.")) return new TextDecoder().decode(bytes);
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("Dieser Browser kann den Link nicht entpacken (zu alt)");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return await new Response(stream).text();
+  }
+
+  async function shareCurrentCollection() {
+    const col = currentCollection();
+    if (!col) return;
+    try {
+      const colCards = await getCollectionCards(col);
+      const text = col.name.replace(/\n/g, " ") + "\n" +
+        colCards.map(c => c.set + ":" + c.number + ":" + (c.qty || 1)).join(";");
+      const url = location.origin + location.pathname + "#share=" + await compressText(text);
+      if (url.length > 30000) {
+        alert("Diese Collection ist zu groß für einen Teilen-Link – bitte den JSON-Export verwenden.");
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share({ title: col.name, url: url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Der Teilen-Link wurde in die Zwischenablage kopiert.");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") alert("Teilen fehlgeschlagen: " + e.message);
+    }
+  }
+
+  function clearShareHash() {
+    if (location.hash.startsWith("#share=")) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+  }
+  function exitShareUi() {
+    if (!sharedView) return;
+    sharedView = null;
+    shareBar.hidden = true;
+    clearShareHash();
+  }
+
+  // Liest "#share=…" aus der URL und zeigt die Collection schreibgeschützt an.
+  // Gibt true zurück, wenn ein Link verarbeitet wurde.
+  async function openSharedFromHash() {
+    const m = location.hash.match(/^#share=(.+)$/);
+    if (!m) return false;
+    try {
+      const text = await decompressText(decodeURIComponent(m[1]));
+      const nl = text.indexOf("\n");
+      const name = text.slice(0, nl).trim() || "Geteilte Collection";
+      const entries = text.slice(nl + 1).split(";").filter(Boolean).map(part => {
+        const [set, num, qty] = part.split(":");
+        return { qty: parseInt(qty, 10) || 1, ident: { set: set, collector_number: num }, raw: set + " " + num };
+      });
+      if (!entries.length) throw new Error("Der Link enthält keine Karten");
+      loadToken++;
+      const token = loadToken;
+      cards = [];
+      cardEls.clear();
+      grid.replaceChildren();
+      emptyNote.hidden = true;
+      showProgress();
+      const { found } = await resolveEntries(entries, t => { progressText.textContent = t; });
+      if (token !== loadToken) return true;
+      if (!found.length) throw new Error("Keine der Karten konnte geladen werden");
+      sharedView = { name: name, found: found };
+      document.getElementById("share-title").textContent =
+        "Geteilte Collection: „" + name + "“ (" + found.length + " Karten)";
+      shareBar.hidden = false;
+      addBatch(found.map(f => ({ ...f.card, qty: f.qty })), token);
+      progress.hidden = true;
+      return true;
+    } catch (e) {
+      alert("Der geteilte Link konnte nicht geladen werden: " + e.message);
+      clearShareHash();
+      return false;
+    }
+  }
+
+  function adoptSharedCollection() {
+    if (!sharedView) return;
+    const entryById = new Map();
+    for (const f of sharedView.found) {
+      cardCache[f.card.id] = f.card;
+      const existing = entryById.get(f.card.id);
+      if (existing) existing.qty += f.qty;
+      else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+    }
+    saveCardCache();
+    const col = {
+      id: "c" + Date.now().toString(36),
+      name: sharedView.name,
+      createdAt: new Date().toISOString(),
+      entries: [...entryById.values()]
+    };
+    collections.push(col);
+    saveCollections();
+    switchCollection(col.id); // beendet auch die geteilte Ansicht
+  }
+
   function exitCompareUi() {
     compareMode = null;
     filters.compareFilter = "all";
@@ -1024,10 +1158,12 @@ Counterspell
     document.getElementById("col-export").disabled = none;
     document.getElementById("col-add").disabled = none;
     document.getElementById("col-compare").disabled = none || collections.length < 2;
+    document.getElementById("col-share").disabled = none;
   }
 
   function switchCollection(id) {
     exitCompareUi();
+    exitShareUi();
     activeId = id;
     if (id) localStorage.setItem(ACTIVE_KEY, id);
     else localStorage.removeItem(ACTIVE_KEY);
@@ -1599,6 +1735,7 @@ Counterspell
   document.getElementById("col-cancel").addEventListener("click", closeModal);
   document.getElementById("col-create").addEventListener("click", handleModalSubmit);
   document.getElementById("col-delete").addEventListener("click", () => { closeMoreMenu(); deleteCurrentCollection(); });
+  document.getElementById("col-share").addEventListener("click", () => { closeMoreMenu(); shareCurrentCollection(); });
   document.getElementById("col-export").addEventListener("click", () => { closeMoreMenu(); exportCurrentCollection(); });
   document.getElementById("col-import-btn").addEventListener("click", () => {
     closeMoreMenu();
@@ -1633,6 +1770,8 @@ Counterspell
     if (v) startCompare(v);
   });
   document.getElementById("compare-exit").addEventListener("click", () => switchCollection(activeId));
+  document.getElementById("share-adopt").addEventListener("click", adoptSharedCollection);
+  document.getElementById("share-close").addEventListener("click", () => switchCollection(activeId));
   document.querySelectorAll(".cmp-chip").forEach(chip => {
     chip.addEventListener("click", () => {
       filters.compareFilter = chip.dataset.cmp;
@@ -1666,7 +1805,9 @@ Counterspell
   applyView();
   renderCollectionSelect();
   loadCardmarketPrices();
-  switchCollection(activeId);
+  openSharedFromHash().then(handled => {
+    if (!handled) switchCollection(activeId);
+  });
 })();
 </script>
 </body>
