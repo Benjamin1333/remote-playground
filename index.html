@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MTG Kartenübersicht & Collections</title>
 <style>
   :root {
@@ -21,6 +21,8 @@
     overflow-x: hidden;
     overflow-x: clip;
     overscroll-behavior-x: none;
+    /* Blockiert Doppeltipp-Zoom, Scrollen/Pannen bleibt erlaubt */
+    touch-action: pan-x pan-y;
   }
   body {
     margin: 0;
@@ -1635,6 +1637,13 @@ Counterspell
     if (!compareOverlay.hidden) compareOverlay.hidden = true;
     closeMoreMenu();
   });
+
+  // Pinch-to-Zoom unterbinden. iOS Safari ignoriert user-scalable=no,
+  // reagiert aber auf gesturestart/touchmove mit scale.
+  document.addEventListener("gesturestart", e => e.preventDefault());
+  document.addEventListener("touchmove", e => {
+    if (e.scale !== undefined && e.scale !== 1) e.preventDefault();
+  }, { passive: false });
 
   // Zurück-nach-oben-Button
   const toTop = document.getElementById("to-top");
