@@ -474,7 +474,7 @@
     </select>
   </div>
   <div class="control-group">
-    <input type="search" id="search" placeholder="Karte suchen …">
+    <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
   </div>
   <div class="control-group">
     <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
@@ -535,7 +535,7 @@ Counterspell
 
   const FAV_KEY = "tmt-favorites-v1";
   const COLLECTIONS_KEY = "mtg-collections-v1";
-  const CARD_CACHE_KEY = "mtg-card-cache-v1";
+  const CARD_CACHE_KEY = "mtg-card-cache-v2"; // v2: inkl. Typ-/Regel-/Flavor-Text für die Suche
   const ACTIVE_KEY = "mtg-active-collection-v1";
   const VIEW_KEY = "mtg-view-v1";
   const FILTERS_OPEN_KEY = "mtg-filters-open-v1";
@@ -551,6 +551,7 @@ Counterspell
 
   let collections = loadJson(COLLECTIONS_KEY, []);
   let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
+  localStorage.removeItem("mtg-card-cache-v1"); // alter Cache ohne Textfelder
   let activeId = localStorage.getItem(ACTIVE_KEY);
   if (!collections.some(c => c.id === activeId)) {
     activeId = collections.length ? collections[0].id : null;
@@ -598,6 +599,7 @@ Counterspell
   }
 
   function simplify(card) {
+    const faces = card.card_faces || [card];
     const img = card.image_uris || (card.card_faces && card.card_faces[0].image_uris) || {};
     return {
       id: card.id,
@@ -608,6 +610,9 @@ Counterspell
       colors: card.colors !== undefined ? card.colors
             : (card.card_faces ? [...new Set(card.card_faces.flatMap(f => f.colors || []))] : []),
       rarity: card.rarity,
+      typeLine: card.type_line || faces.map(f => f.type_line).filter(Boolean).join(" // "),
+      oracle: faces.map(f => f.oracle_text || "").filter(Boolean).join("\n"),
+      flavor: faces.map(f => f.flavor_text || "").filter(Boolean).join("\n"),
       imageSmall: img.small || "",
       image: img.normal || img.large || img.small || "",
       url: card.scryfall_uri,
@@ -617,6 +622,17 @@ Counterspell
       foilOnly: !(card.prices && card.prices.eur) && !!(card.prices && card.prices.eur_foil),
       trend: null
     };
+  }
+
+  // Durchsuchbarer Gesamttext einer Karte (einmal berechnet, dann gemerkt).
+  // Funktioniert auch für Karten aus alten Exporten ohne Textfelder.
+  function searchTextOf(card) {
+    if (!card._search) {
+      card._search = normName(
+        [card.name, card.typeLine, card.oracle, card.flavor].filter(Boolean).join("\n")
+      );
+    }
+    return card._search;
   }
 
   function formatEur(v) {
@@ -1083,7 +1099,7 @@ Counterspell
   function matchesFilters(card) {
     if (!matchesColorFilter(card)) return false;
     if (filters.favsOnly && !favorites.has(card.id)) return false;
-    if (filters.search && !card.name.toLowerCase().includes(filters.search)) return false;
+    if (filters.search && !searchTextOf(card).includes(filters.search)) return false;
     if (filters.priceMin !== null && (card.price === null || card.price < filters.priceMin)) return false;
     if (filters.priceMax !== null && (card.price === null || card.price > filters.priceMax)) return false;
     return true;
@@ -1203,7 +1219,7 @@ Counterspell
     applyFilters();
   });
   document.getElementById("search").addEventListener("input", e => {
-    filters.search = e.target.value.trim().toLowerCase();
+    filters.search = normName(e.target.value);
     applyFilters();
   });
   document.getElementById("fav-filter").addEventListener("click", e => {
