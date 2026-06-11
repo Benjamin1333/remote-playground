@@ -69,6 +69,108 @@
   .bar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .bar-btn:disabled:hover { border-color: var(--border); }
 
+  .more-wrap { position: relative; }
+  .more-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    z-index: 30;
+    overflow: hidden;
+  }
+  .more-menu[hidden] { display: none; }
+  .more-menu button {
+    background: none;
+    border: none;
+    color: var(--text);
+    text-align: left;
+    padding: 11px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .more-menu button:hover { background: var(--panel-2); }
+  .more-menu button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .more-menu button.danger { color: #e8838f; }
+
+  .compare-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 24px;
+    background: var(--panel-2);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-bar[hidden] { display: none; }
+  .compare-bar .cmp-title { font-size: 0.88rem; }
+  .compare-bar .cmp-title strong { color: var(--accent); }
+  .cmp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cmp-chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .cmp-chip.active { border-color: var(--accent); color: var(--accent); }
+
+  .cmp-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    border-radius: 8px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: rgba(10,13,16,0.82);
+  }
+  .cmp-badge.both { border: 1px solid var(--accent); color: var(--accent); }
+  .cmp-badge.onlyA { border: 1px solid #7db8e8; color: #7db8e8; }
+  .cmp-badge.onlyB { border: 1px solid #e8a87c; color: #e8a87c; }
+
+  .to-top {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 1.2rem;
+    cursor: pointer;
+    z-index: 50;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  }
+  .to-top:hover { border-color: var(--accent); color: var(--accent); }
+
+  .modal-small { max-width: 420px; }
+
+  /* Mobile: größere Touch-Ziele, 16px-Inputs gegen iOS-Auto-Zoom */
+  @media (max-width: 700px) {
+    input[type="number"], input[type="search"], input[type="text"], select, textarea {
+      font-size: 16px;
+    }
+    .color-btn { width: 42px; height: 42px; }
+    .bar-btn, .view-btn, .fav-filter-btn, .cmp-chip { min-height: 42px; }
+    .collection-bar select { flex: 1; min-width: 0; }
+    .grid { padding: 8px 12px 48px; gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
   .controls {
     position: sticky;
     top: 0;
@@ -437,12 +539,19 @@
 
 <div class="collection-bar">
   <span class="label">Collection</span>
-  <select id="collection-select"></select>
-  <button class="bar-btn primary" id="col-new">+ Neue Collection</button>
-  <button class="bar-btn" id="col-export" title="Aktuelle Collection als JSON-Datei sichern">Export</button>
-  <button class="bar-btn" id="col-import-btn" title="Collection aus JSON-Datei laden">Import</button>
+  <select id="collection-select" aria-label="Collection auswählen"></select>
+  <button class="bar-btn primary" id="col-new">+ Neu</button>
+  <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
+  <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
+  <div class="more-wrap">
+    <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
+    <div class="more-menu" id="more-menu" hidden>
+      <button id="col-export">Export als JSON</button>
+      <button id="col-import-btn">Import aus JSON</button>
+      <button id="col-delete" class="danger">Collection löschen</button>
+    </div>
+  </div>
   <input type="file" id="col-import" accept="application/json,.json" hidden>
-  <button class="bar-btn" id="col-delete">Löschen</button>
 </div>
 
 <div class="controls collapsed" id="controls">
@@ -490,6 +599,17 @@
 
 <div class="status-bar" id="status"></div>
 
+<div class="compare-bar" id="compare-bar" hidden>
+  <span class="cmp-title" id="compare-title"></span>
+  <div class="cmp-chips" id="cmp-chips">
+    <button class="cmp-chip active" data-cmp="all">Alle</button>
+    <button class="cmp-chip" data-cmp="both">In beiden</button>
+    <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
+    <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
+  </div>
+  <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
+</div>
+
 <div class="progress-wrap" id="progress">
   <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
   <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
@@ -500,9 +620,9 @@
 
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal">
-    <h2>Neue Collection anlegen</h2>
+    <h2 id="modal-title">Neue Collection anlegen</h2>
     <div class="row">
-      <div>
+      <div id="col-name-wrap">
         <label for="col-name">Name der Collection</label>
         <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
       </div>
@@ -532,6 +652,20 @@ Counterspell
   </div>
 </div>
 
+<div class="modal-overlay" id="compare-overlay" hidden>
+  <div class="modal modal-small">
+    <h2>Collections vergleichen</h2>
+    <p class="hint" id="compare-hint"></p>
+    <select id="compare-select" aria-label="Collection zum Vergleich"></select>
+    <div class="buttons">
+      <button class="bar-btn" id="compare-cancel">Abbrechen</button>
+      <button class="bar-btn primary" id="compare-start">Vergleichen</button>
+    </div>
+  </div>
+</div>
+
+<button class="to-top" id="to-top" hidden aria-label="Nach oben scrollen" title="Nach oben">↑</button>
+
 <script>
 (function () {
   // ===== Konstanten =====
@@ -552,7 +686,7 @@ Counterspell
   let cards = [];
   const cardEls = new Map(); // card.id -> DOM-Element (pro Collection-Ansicht)
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
-  const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false };
+  const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false, compareFilter: "all" };
 
   let collections = loadJson(COLLECTIONS_KEY, []);
   let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
@@ -719,6 +853,138 @@ Counterspell
     }
   }
 
+  // Lädt alle Karten einer Collection (Cache zuerst, Rest von Scryfall)
+  // und gibt sie gesammelt zurück – für den Vergleich zweier Collections.
+  async function getCollectionCards(col) {
+    const out = [];
+    const missing = [];
+    for (const entry of col.entries) {
+      const cached = cardCache[entry.id];
+      if (cached) out.push({ ...cached, qty: entry.qty });
+      else missing.push(entry);
+    }
+    for (let i = 0; i < missing.length; i += 75) {
+      const slice = missing.slice(i, i + 75);
+      const res = await fetch(COLLECTION_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+      });
+      if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
+      const json = await res.json();
+      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
+      for (const c of json.data) {
+        const s = simplify(c);
+        cardCache[c.id] = s;
+        out.push({ ...s, qty: qtyById.get(c.id) || 1 });
+      }
+    }
+    if (missing.length) saveCardCache();
+    return out;
+  }
+
+  // ===== Vergleich zweier Collections =====
+  let compareMode = null; // { a, b } oder null
+  const compareBar = document.getElementById("compare-bar");
+  const compareOverlay = document.getElementById("compare-overlay");
+
+  function exitCompareUi() {
+    compareMode = null;
+    filters.compareFilter = "all";
+    compareBar.hidden = true;
+    document.querySelectorAll(".cmp-chip").forEach(ch =>
+      ch.classList.toggle("active", ch.dataset.cmp === "all"));
+  }
+
+  function openCompareDialog() {
+    const a = currentCollection();
+    if (!a || collections.length < 2) return;
+    const sel = document.getElementById("compare-select");
+    sel.innerHTML = "";
+    for (const c of collections) {
+      if (c.id === a.id) continue;
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.name + " (" + c.entries.length + " Karten)";
+      sel.appendChild(opt);
+    }
+    document.getElementById("compare-hint").textContent =
+      "„" + a.name + "“ (A) wird verglichen mit (B):";
+    compareOverlay.hidden = false;
+  }
+
+  async function startCompare(bId) {
+    const a = currentCollection();
+    const b = collections.find(c => c.id === bId);
+    if (!a || !b) return;
+    compareOverlay.hidden = true;
+    loadToken++;
+    const token = loadToken;
+    cards = [];
+    cardEls.clear();
+    grid.replaceChildren();
+    emptyNote.hidden = true;
+    showProgress();
+    progressText.textContent = "Lade beide Collections …";
+    try {
+      const [aCards, bCards] = await Promise.all([getCollectionCards(a), getCollectionCards(b)]);
+      if (token !== loadToken) return;
+      // Verglichen wird über den Kartennamen (verschiedene Drucke zählen zusammen)
+      const byName = new Map();
+      for (const c of aCards) {
+        const key = normName(c.name);
+        const e = byName.get(key);
+        if (e) e.qtyA += c.qty || 1;
+        else byName.set(key, { card: c, qtyA: c.qty || 1, qtyB: 0 });
+      }
+      for (const c of bCards) {
+        const key = normName(c.name);
+        const e = byName.get(key);
+        if (e) e.qtyB += c.qty || 1;
+        else byName.set(key, { card: c, qtyA: 0, qtyB: c.qty || 1 });
+      }
+      const list = [...byName.values()].map(e => ({
+        ...e.card,
+        qty: e.qtyA + e.qtyB,
+        compare: {
+          a: e.qtyA,
+          b: e.qtyB,
+          state: e.qtyA && e.qtyB ? "both" : (e.qtyA ? "onlyA" : "onlyB")
+        }
+      }));
+      compareMode = { a, b };
+      filters.compareFilter = "all";
+      const counts = { both: 0, onlyA: 0, onlyB: 0 };
+      for (const c of list) counts[c.compare.state]++;
+      document.getElementById("compare-title").textContent =
+        "Vergleich: A „" + a.name + "“ ↔ B „" + b.name + "“";
+      const chipLabels = {
+        all: "Alle (" + list.length + ")",
+        both: "In beiden (" + counts.both + ")",
+        onlyA: "Nur A (" + counts.onlyA + ")",
+        onlyB: "Nur B (" + counts.onlyB + ")"
+      };
+      document.querySelectorAll(".cmp-chip").forEach(ch => {
+        ch.textContent = chipLabels[ch.dataset.cmp];
+        ch.classList.toggle("active", ch.dataset.cmp === "all");
+      });
+      compareBar.hidden = false;
+      addBatch(list, token);
+      progress.hidden = true;
+    } catch (err) {
+      if (token !== loadToken) return;
+      progress.hidden = true;
+      emptyNote.textContent = "Vergleich fehlgeschlagen: " + err.message;
+      emptyNote.hidden = false;
+    }
+  }
+
+  function cmpBadgeLabel(cmp) {
+    if (cmp.state === "both") return "A:" + cmp.a + " B:" + cmp.b;
+    if (cmp.state === "onlyA") return "nur A" + (cmp.a > 1 ? " (" + cmp.a + "×)" : "");
+    return "nur B" + (cmp.b > 1 ? " (" + cmp.b + "×)" : "");
+  }
+
   // ===== Collection-Verwaltung =====
   function currentCollection() {
     return collections.find(c => c.id === activeId) || null;
@@ -742,9 +1008,12 @@ Counterspell
     const none = !currentCollection();
     document.getElementById("col-delete").disabled = none;
     document.getElementById("col-export").disabled = none;
+    document.getElementById("col-add").disabled = none;
+    document.getElementById("col-compare").disabled = none || collections.length < 2;
   }
 
   function switchCollection(id) {
+    exitCompareUi();
     activeId = id;
     if (id) localStorage.setItem(ACTIVE_KEY, id);
     else localStorage.removeItem(ACTIVE_KEY);
@@ -757,7 +1026,9 @@ Counterspell
     const col = currentCollection();
     if (!col) {
       progress.hidden = true;
-      emptyNote.textContent = "Noch keine Collection vorhanden – oben auf „+ Neue Collection“ klicken und eine Kartenliste einfügen.";
+      emptyNote.innerHTML = 'Noch keine Collection vorhanden. ' +
+        '<br><br><button class="bar-btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
+      document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
       emptyNote.hidden = false;
       updateStatus(0, 0);
       return;
@@ -958,23 +1229,33 @@ Counterspell
     return { found, unresolved };
   }
 
-  // ===== Modal: neue Collection =====
-  function openModal() {
+  // ===== Modal: Collection anlegen / Karten hinzufügen =====
+  let modalMode = "create";
+
+  function openModal(mode) {
+    modalMode = mode === "add" ? "add" : "create";
+    const isAdd = modalMode === "add";
+    document.getElementById("modal-title").textContent = isAdd
+      ? "Karten hinzufügen zu „" + currentCollection().name + "“"
+      : "Neue Collection anlegen";
+    document.getElementById("col-name-wrap").style.display = isAdd ? "none" : "";
+    document.getElementById("col-create").textContent = isAdd ? "Karten hinzufügen" : "Collection erstellen";
     document.getElementById("col-name").value = "";
     document.getElementById("col-set").value = "";
     document.getElementById("col-list").value = "";
     colStatus.innerHTML = "";
     document.getElementById("col-create").disabled = false;
     modalOverlay.hidden = false;
-    document.getElementById("col-name").focus();
+    (isAdd ? document.getElementById("col-list") : document.getElementById("col-name")).focus();
   }
   function closeModal() { modalOverlay.hidden = true; }
 
-  async function handleCreateCollection() {
+  async function handleModalSubmit() {
+    const isAdd = modalMode === "add";
     const name = document.getElementById("col-name").value.trim();
     const setHint = document.getElementById("col-set").value.trim().toLowerCase();
     const text = document.getElementById("col-list").value;
-    if (!name) { colStatus.innerHTML = '<span class="warn">Bitte einen Namen angeben.</span>'; return; }
+    if (!isAdd && !name) { colStatus.innerHTML = '<span class="warn">Bitte einen Namen angeben.</span>'; return; }
     if (!text.trim()) { colStatus.innerHTML = '<span class="warn">Bitte eine Kartenliste einfügen.</span>'; return; }
 
     const { entries, errors } = parseList(text, setHint || null);
@@ -994,28 +1275,47 @@ Counterspell
         createBtn.disabled = false;
         return;
       }
-      // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
-      const entryById = new Map();
-      for (const f of found) {
-        cardCache[f.card.id] = f.card;
-        const existing = entryById.get(f.card.id);
-        if (existing) existing.qty += f.qty;
-        else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+      let col;
+      if (isAdd) {
+        col = currentCollection();
+        const byId = new Map(col.entries.map(e => [e.id, e]));
+        for (const f of found) {
+          cardCache[f.card.id] = f.card;
+          const existing = byId.get(f.card.id);
+          if (existing) existing.qty += f.qty;
+          else {
+            const entry = { id: f.card.id, qty: f.qty };
+            col.entries.push(entry);
+            byId.set(f.card.id, entry);
+          }
+        }
+        saveCardCache();
+        saveCollections();
+        switchCollection(col.id); // Ansicht mit neuen Karten neu aufbauen
+      } else {
+        // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
+        const entryById = new Map();
+        for (const f of found) {
+          cardCache[f.card.id] = f.card;
+          const existing = entryById.get(f.card.id);
+          if (existing) existing.qty += f.qty;
+          else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+        }
+        saveCardCache();
+        col = {
+          id: "c" + Date.now().toString(36),
+          name: name,
+          createdAt: new Date().toISOString(),
+          entries: [...entryById.values()]
+        };
+        collections.push(col);
+        saveCollections();
+        switchCollection(col.id);
       }
-      saveCardCache();
-      const col = {
-        id: "c" + Date.now().toString(36),
-        name: name,
-        createdAt: new Date().toISOString(),
-        entries: [...entryById.values()]
-      };
-      collections.push(col);
-      saveCollections();
-      switchCollection(col.id);
 
       const problems = unresolved.concat(errors);
       if (problems.length) {
-        colStatus.innerHTML = '<span class="ok">' + col.entries.length +
+        colStatus.innerHTML = '<span class="ok">' + found.length +
           ' Karten übernommen.</span>\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
           problems.join("\n");
         createBtn.disabled = false;
@@ -1059,11 +1359,15 @@ Counterspell
         (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
         ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
       "</a>" +
-      (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "") +
+      (card.compare
+        ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
+        : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
       '<div class="info">' +
         '<div class="name-row">' +
           '<div class="name">' + card.name + "</div>" +
-          '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
+          '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") +
+            '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
+            favorites.has(card.id) + '">' +
             (favorites.has(card.id) ? "★" : "☆") +
           "</button>" +
         "</div>" +
@@ -1078,10 +1382,12 @@ Counterspell
         favorites.delete(card.id);
         btn.classList.remove("faved");
         btn.textContent = "☆";
+        btn.setAttribute("aria-pressed", "false");
       } else {
         favorites.add(card.id);
         btn.classList.add("faved");
         btn.textContent = "★";
+        btn.setAttribute("aria-pressed", "true");
       }
       saveFavorites();
       applyFilters();
@@ -1102,6 +1408,8 @@ Counterspell
   }
 
   function matchesFilters(card) {
+    if (compareMode && filters.compareFilter !== "all" &&
+        card.compare && card.compare.state !== filters.compareFilter) return false;
     if (!matchesColorFilter(card)) return false;
     if (filters.favsOnly && !favorites.has(card.id)) return false;
     if (filters.search && !searchTextOf(card).includes(filters.search)) return false;
@@ -1131,7 +1439,7 @@ Counterspell
 
   function updateStatus(visibleCount, totalValue) {
     let text = visibleCount + " von " + cards.length + " Karten";
-    if (totalValue > 0) text += " · Wert: " + formatEur(totalValue);
+    if (totalValue > 0 && !compareMode) text += " · Wert: " + formatEur(totalValue);
     text += " · " + favorites.size + " Favoriten";
     if (cmInfo) {
       text += " · Cardmarket-Preise: Stand " + new Date(cmInfo.updatedAt).toLocaleDateString("de-DE");
@@ -1157,7 +1465,8 @@ Counterspell
         if (card.price !== null) value += card.price * (card.qty || 1);
       }
     }
-    emptyNote.hidden = visible > 0 || cards.length === 0;
+    // Ohne Collection bleibt der Hinweis mit CTA sichtbar
+    emptyNote.hidden = visible > 0 || (cards.length === 0 && !!currentCollection());
     updateStatus(visible, value);
     updateFilterToggle();
   }
@@ -1223,9 +1532,13 @@ Counterspell
     filters.sort = e.target.value;
     applyFilters();
   });
+  let searchTimer = null;
   document.getElementById("search").addEventListener("input", e => {
-    filters.search = normName(e.target.value);
-    applyFilters();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      filters.search = normName(e.target.value);
+      applyFilters();
+    }, 150);
   });
   document.getElementById("fav-filter").addEventListener("click", e => {
     filters.favsOnly = !filters.favsOnly;
@@ -1265,18 +1578,68 @@ Counterspell
   });
 
   colSelect.addEventListener("change", e => { if (e.target.value) switchCollection(e.target.value); });
-  document.getElementById("col-new").addEventListener("click", openModal);
+  document.getElementById("col-new").addEventListener("click", () => openModal("create"));
+  document.getElementById("col-add").addEventListener("click", () => {
+    if (currentCollection()) openModal("add");
+  });
   document.getElementById("col-cancel").addEventListener("click", closeModal);
-  document.getElementById("col-create").addEventListener("click", handleCreateCollection);
-  document.getElementById("col-delete").addEventListener("click", deleteCurrentCollection);
-  document.getElementById("col-export").addEventListener("click", exportCurrentCollection);
-  document.getElementById("col-import-btn").addEventListener("click", () => document.getElementById("col-import").click());
+  document.getElementById("col-create").addEventListener("click", handleModalSubmit);
+  document.getElementById("col-delete").addEventListener("click", () => { closeMoreMenu(); deleteCurrentCollection(); });
+  document.getElementById("col-export").addEventListener("click", () => { closeMoreMenu(); exportCurrentCollection(); });
+  document.getElementById("col-import-btn").addEventListener("click", () => {
+    closeMoreMenu();
+    document.getElementById("col-import").click();
+  });
   document.getElementById("col-import").addEventListener("change", e => {
     if (e.target.files[0]) importCollectionFile(e.target.files[0]);
     e.target.value = "";
   });
+
+  // ⋯-Menü
+  const moreBtn = document.getElementById("col-more");
+  const moreMenu = document.getElementById("more-menu");
+  function closeMoreMenu() {
+    moreMenu.hidden = true;
+    moreBtn.setAttribute("aria-expanded", "false");
+  }
+  moreBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    moreMenu.hidden = !moreMenu.hidden;
+    moreBtn.setAttribute("aria-expanded", String(!moreMenu.hidden));
+  });
+  document.addEventListener("click", e => {
+    if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) closeMoreMenu();
+  });
+
+  // Vergleich
+  document.getElementById("col-compare").addEventListener("click", openCompareDialog);
+  document.getElementById("compare-cancel").addEventListener("click", () => { compareOverlay.hidden = true; });
+  document.getElementById("compare-start").addEventListener("click", () => {
+    const v = document.getElementById("compare-select").value;
+    if (v) startCompare(v);
+  });
+  document.getElementById("compare-exit").addEventListener("click", () => switchCollection(activeId));
+  document.querySelectorAll(".cmp-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      filters.compareFilter = chip.dataset.cmp;
+      document.querySelectorAll(".cmp-chip").forEach(c => c.classList.toggle("active", c === chip));
+      applyFilters();
+    });
+  });
+  compareOverlay.addEventListener("click", e => { if (e.target === compareOverlay) compareOverlay.hidden = true; });
+
   modalOverlay.addEventListener("click", e => { if (e.target === modalOverlay) closeModal(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !modalOverlay.hidden) closeModal(); });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!modalOverlay.hidden) closeModal();
+    if (!compareOverlay.hidden) compareOverlay.hidden = true;
+    closeMoreMenu();
+  });
+
+  // Zurück-nach-oben-Button
+  const toTop = document.getElementById("to-top");
+  window.addEventListener("scroll", () => { toTop.hidden = window.scrollY < 600; }, { passive: true });
+  toTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
   // ===== Start =====
   applyView();
