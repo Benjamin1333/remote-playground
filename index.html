@@ -289,24 +289,24 @@
   }
   .card .cm-link:hover { color: var(--gold); text-decoration: underline; }
 
-  .fav-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    font-size: 1.15rem;
-    background: rgba(10,13,16,0.72);
-    color: #aab4bd;
+  .card .name-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .fav-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0;
+    color: #aab4bd;
+    flex-shrink: 0;
     transition: transform 0.1s, color 0.1s;
   }
-  .fav-btn:hover { transform: scale(1.15); color: var(--gold); }
+  .fav-btn:hover { transform: scale(1.2); color: var(--gold); }
   .fav-btn.faved { color: var(--gold); }
 
   .qty-badge {
@@ -322,23 +322,22 @@
     font-weight: 700;
   }
 
-  /* Kompakte Galerieansicht: nur Kartenbilder, mehr Karten pro Zeile */
+  /* Kompakte Galerieansicht: kleinere Kacheln, gleiche Infos */
   .grid.gallery {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
   }
   .grid.gallery .card {
     border-radius: 8px;
-    contain-intrinsic-size: 150px 209px;
+    contain-intrinsic-size: 160px 310px;
   }
-  .grid.gallery .card .info { display: none; }
-  .grid.gallery .fav-btn {
-    width: 30px;
-    height: 30px;
-    font-size: 0.95rem;
-    top: 6px;
-    right: 6px;
-  }
+  .grid.gallery .card .info { padding: 7px 8px 9px; gap: 2px; }
+  .grid.gallery .card .name { font-size: 0.76rem; }
+  .grid.gallery .card .meta { font-size: 0.66rem; }
+  .grid.gallery .card .price { font-size: 0.8rem; }
+  .grid.gallery .card .price small { font-size: 0.64rem; }
+  .grid.gallery .card .cm-link { font-size: 0.64rem; }
+  .grid.gallery .fav-btn { font-size: 1rem; }
   .grid.gallery .qty-badge {
     top: 6px;
     left: 6px;
@@ -463,7 +462,7 @@
   <div class="control-group">
     <span class="label">Ansicht</span>
     <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
-    <button class="view-btn" id="view-gallery" title="Kompakte Galerie – nur Kartenbilder">▦ Galerie</button>
+    <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
   </div>
   <div class="control-group">
     <span class="label">Sortierung</span>
@@ -1040,11 +1039,13 @@ Counterspell
         ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
       "</a>" +
       (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "") +
-      '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
-        (favorites.has(card.id) ? "★" : "☆") +
-      "</button>" +
       '<div class="info">' +
-        '<div class="name">' + card.name + "</div>" +
+        '<div class="name-row">' +
+          '<div class="name">' + card.name + "</div>" +
+          '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") + '" title="Als Favorit markieren">' +
+            (favorites.has(card.id) ? "★" : "☆") +
+          "</button>" +
+        "</div>" +
         '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
           ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
           (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
