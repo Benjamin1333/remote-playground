@@ -44,19 +44,20 @@
 
   .collection-bar {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
-    align-items: center;
-    justify-content: center;
+    max-width: 640px;
+    margin: 0 auto;
     padding: 14px 24px 0;
   }
-  .collection-bar .label {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--muted);
+  .collection-bar select { width: 100%; }
+  .collection-actions {
+    display: flex;
+    gap: 8px;
   }
-  .collection-bar select { max-width: 320px; }
+  .collection-actions > .bar-btn { flex: 1; }
+  .more-wrap { flex: 0 0 auto; }
+  .more-wrap > .bar-btn { width: 100%; min-width: 48px; height: 100%; }
   .bar-btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -168,7 +169,6 @@
     }
     .color-btn { width: 42px; height: 42px; }
     .bar-btn, .view-btn, .fav-filter-btn, .cmp-chip { min-height: 42px; }
-    .collection-bar select { flex: 1; min-width: 0; }
     .grid { padding: 8px 12px 48px; gap: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -543,15 +543,17 @@
 
 <div class="collection-bar">
   <select id="collection-select" aria-label="Collection auswählen"></select>
-  <button class="bar-btn primary" id="col-new">+ Neu</button>
-  <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
-  <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
-  <div class="more-wrap">
-    <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
-    <div class="more-menu" id="more-menu" hidden>
-      <button id="col-export">Export als JSON</button>
-      <button id="col-import-btn">Import aus JSON</button>
-      <button id="col-delete" class="danger">Collection löschen</button>
+  <div class="collection-actions">
+    <button class="bar-btn primary" id="col-new">+ Neu</button>
+    <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
+    <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
+    <div class="more-wrap">
+      <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
+      <div class="more-menu" id="more-menu" hidden>
+        <button id="col-export">Export als JSON</button>
+        <button id="col-import-btn">Import aus JSON</button>
+        <button id="col-delete" class="danger">Collection löschen</button>
+      </div>
     </div>
   </div>
   <input type="file" id="col-import" accept="application/json,.json" hidden>
