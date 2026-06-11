@@ -988,10 +988,10 @@ Counterspell
 
   async function ensureLiveBucket() {
     if (liveStore && liveStore.bucket) return;
-    const email = prompt(
-      "Für das Live-Teilen wird einmalig ein kostenloser Speicher bei kvdb.io angelegt.\n" +
-      "Dafür ist eine E-Mail-Adresse nötig (wird nur an kvdb.io übermittelt):");
-    if (!email || !email.includes("@")) throw new Error("Ohne E-Mail-Adresse kann kein Live-Speicher angelegt werden");
+    // kvdb.io verlangt beim Anlegen eine E-Mail-Adresse, prüft sie aber
+    // nicht. Wir senden eine generierte Adresse der reservierten
+    // Beispiel-Domain – der Zugriff hängt allein an den lokalen Schlüsseln.
+    const email = "mtg-" + randomToken(12).toLowerCase() + "@example.org";
     const writeKey = randomToken(24);
     const secretKey = randomToken(24);
     const res = await fetch(KVDB_URL, {
