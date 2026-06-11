@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>MTG Kartenübersicht & Collections</title>
+<title>MTG Collections</title>
 <style>
   :root {
     --bg: #101418;
@@ -31,16 +31,16 @@
     color: var(--text);
   }
   header {
-    padding: 24px 24px 8px;
+    padding: 14px 16px 0;
     text-align: center;
   }
   header h1 {
-    margin: 0 0 4px;
-    font-size: 1.7rem;
+    margin: 0;
+    font-size: 1.35rem;
     letter-spacing: 0.5px;
+    white-space: nowrap;
   }
   header h1 span { color: var(--accent); }
-  header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
 
   .collection-bar {
     display: flex;
@@ -537,8 +537,7 @@
 <body>
 
 <header>
-  <h1>🃏 Magic: The Gathering <span>Kartenübersicht & Collections</span></h1>
-  <p>Eigene Collections aus Kartenlisten · Bilder &amp; Daten von Scryfall · Cardmarket-Preise</p>
+  <h1>🃏 MTG <span>Collections</span></h1>
 </header>
 
 <div class="collection-bar">
@@ -550,6 +549,7 @@
     <div class="more-wrap">
       <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
       <div class="more-menu" id="more-menu" hidden>
+        <button id="col-rename">Umbenennen</button>
         <button id="col-live">Live-Link teilen</button>
         <button id="col-live-stop">Live-Teilen beenden</button>
         <button id="col-export">Export als JSON</button>
@@ -1258,6 +1258,7 @@ Counterspell
     document.getElementById("col-export").disabled = none;
     document.getElementById("col-add").disabled = none;
     document.getElementById("col-compare").disabled = none || collections.length < 2;
+    document.getElementById("col-rename").disabled = none;
     document.getElementById("col-live").disabled = none;
     document.getElementById("col-live-stop").disabled =
       none || !liveStore || !liveStore.shares[activeId];
@@ -1300,6 +1301,19 @@ Counterspell
           "</strong><br><button onclick=\"location.reload()\">Erneut versuchen</button>";
         grid.before(box);
       });
+  }
+
+  function renameCurrentCollection() {
+    const col = currentCollection();
+    if (!col) return;
+    const name = prompt("Neuer Name für die Collection:", col.name);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    col.name = trimmed;
+    saveCollections();
+    renderCollectionSelect();
+    syncLiveShare(col); // Name steckt auch im Live-Share-Datensatz
   }
 
   function deleteCurrentCollection() {
@@ -1839,6 +1853,7 @@ Counterspell
   document.getElementById("col-cancel").addEventListener("click", closeModal);
   document.getElementById("col-create").addEventListener("click", handleModalSubmit);
   document.getElementById("col-delete").addEventListener("click", () => { closeMoreMenu(); deleteCurrentCollection(); });
+  document.getElementById("col-rename").addEventListener("click", () => { closeMoreMenu(); renameCurrentCollection(); });
   document.getElementById("col-live").addEventListener("click", () => { closeMoreMenu(); shareLiveCollection(); });
   document.getElementById("col-live-stop").addEventListener("click", () => { closeMoreMenu(); stopLiveShare(); });
   document.getElementById("col-export").addEventListener("click", () => { closeMoreMenu(); exportCurrentCollection(); });
