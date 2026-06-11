@@ -550,7 +550,9 @@
     <div class="more-wrap">
       <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
       <div class="more-menu" id="more-menu" hidden>
-        <button id="col-share">Link teilen</button>
+        <button id="col-share">Link teilen (Schnappschuss)</button>
+        <button id="col-live">Live-Link teilen</button>
+        <button id="col-live-stop">Live-Teilen beenden</button>
         <button id="col-export">Export als JSON</button>
         <button id="col-import-btn">Import aus JSON</button>
         <button id="col-delete" class="danger">Collection löschen</button>
@@ -956,7 +958,7 @@ Counterspell
   }
 
   function clearShareHash() {
-    if (location.hash.startsWith("#share=")) {
+    if (location.hash.startsWith("#share=") || location.hash.startsWith("#live=")) {
       history.replaceState(null, "", location.pathname + location.search);
     }
   }
@@ -1024,6 +1026,166 @@ Counterspell
     collections.push(col);
     saveCollections();
     switchCollection(col.id); // beendet auch die geteilte Ansicht
+  }
+
+  // ===== Live-Teilen über kvdb.io =====
+  // Der Besitzer legt einmalig einen Speicher-Bucket mit write_key an (nur
+  // lokal gespeichert). Geteilte Collections werden bei jeder Änderung
+  // hochgeladen. Der Link enthält Bucket und Schlüssel-Name nur als
+  // komprimierten, base64-kodierten Blob – nicht im Klartext.
+  const LIVE_KEY = "mtg-live-store-v1";
+  const KVDB_URL = "https://kvdb.io";
+  let liveStore = loadJson(LIVE_KEY, null); // { bucket, writeKey, secretKey, shares: {colId: kvKey} }
+
+  function saveLiveStore() { saveJson(LIVE_KEY, liveStore); }
+
+  function randomToken(len) {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const buf = new Uint32Array(len);
+    crypto.getRandomValues(buf);
+    let s = "";
+    for (const v of buf) s += chars[v % chars.length];
+    return s;
+  }
+
+  async function ensureLiveBucket() {
+    if (liveStore && liveStore.bucket) return;
+    const email = prompt(
+      "Für das Live-Teilen wird einmalig ein kostenloser Speicher bei kvdb.io angelegt.\n" +
+      "Dafür ist eine E-Mail-Adresse nötig (wird nur an kvdb.io übermittelt):");
+    if (!email || !email.includes("@")) throw new Error("Ohne E-Mail-Adresse kann kein Live-Speicher angelegt werden");
+    const writeKey = randomToken(24);
+    const secretKey = randomToken(24);
+    const res = await fetch(KVDB_URL, {
+      method: "POST",
+      body: new URLSearchParams({ email: email.trim(), write_key: writeKey, secret_key: secretKey })
+    });
+    const bucket = (await res.text()).trim();
+    if (!res.ok || !/^[A-Za-z0-9]{10,}$/.test(bucket)) {
+      throw new Error("Live-Speicher konnte nicht angelegt werden: " + bucket);
+    }
+    liveStore = { bucket: bucket, writeKey: writeKey, secretKey: secretKey, shares: {} };
+    saveLiveStore();
+    // Keys dauerhaft halten (Best Effort)
+    fetch(KVDB_URL + "/" + bucket, {
+      method: "PATCH",
+      headers: { Authorization: "Basic " + btoa(secretKey + ":") },
+      body: new URLSearchParams({ default_ttl: "0" })
+    }).catch(() => {});
+  }
+
+  async function pushLiveCollection(col) {
+    if (!liveStore || !liveStore.shares[col.id]) return;
+    const colCards = await getCollectionCards(col);
+    const payload = {
+      v: 1,
+      name: col.name,
+      updatedAt: new Date().toISOString(),
+      cards: colCards.map(c => [c.set, c.number, c.qty || 1])
+    };
+    const res = await fetch(KVDB_URL + "/" + liveStore.bucket + "/" + liveStore.shares[col.id], {
+      method: "PUT",
+      headers: { Authorization: "Basic " + btoa(liveStore.writeKey + ":") },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error("Hochladen fehlgeschlagen (Status " + res.status + ")");
+  }
+
+  // Nach Änderungen an einer live geteilten Collection aufrufen
+  function syncLiveShare(col) {
+    if (col && liveStore && liveStore.shares[col.id]) {
+      pushLiveCollection(col).catch(() => { /* nächster Push versucht es erneut */ });
+    }
+  }
+
+  async function shareLiveCollection() {
+    const col = currentCollection();
+    if (!col) return;
+    try {
+      await ensureLiveBucket();
+      if (!liveStore.shares[col.id]) {
+        liveStore.shares[col.id] = randomToken(12);
+        saveLiveStore();
+        renderCollectionSelect();
+      }
+      await pushLiveCollection(col);
+      const blob = await compressText("kv|" + liveStore.bucket + "|" + liveStore.shares[col.id]);
+      const url = location.origin + location.pathname + "#live=" + blob;
+      if (navigator.share) {
+        await navigator.share({ title: col.name, url: url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Der Live-Link wurde in die Zwischenablage kopiert.\n" +
+          "Änderungen an dieser Collection werden ab jetzt automatisch hochgeladen.");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") alert("Live-Teilen fehlgeschlagen: " + e.message);
+    }
+  }
+
+  function removeLiveShare(colId) {
+    if (!liveStore || !liveStore.shares[colId]) return;
+    const kvKey = liveStore.shares[colId];
+    delete liveStore.shares[colId];
+    saveLiveStore();
+    fetch(KVDB_URL + "/" + liveStore.bucket + "/" + kvKey, {
+      method: "DELETE",
+      headers: { Authorization: "Basic " + btoa(liveStore.writeKey + ":") }
+    }).catch(() => {});
+  }
+
+  function stopLiveShare() {
+    const col = currentCollection();
+    if (!col || !liveStore || !liveStore.shares[col.id]) return;
+    removeLiveShare(col.id);
+    renderCollectionSelect();
+    alert("Live-Teilen beendet – bestehende Links zeigen die Collection nicht mehr an.");
+  }
+
+  // Liest "#live=…" aus der URL, holt den aktuellen Stand vom Speicher
+  // und zeigt ihn schreibgeschützt an. Tab-Reload lädt immer frisch.
+  async function openLiveFromHash() {
+    const m = location.hash.match(/^#live=(.+)$/);
+    if (!m) return false;
+    try {
+      const text = await decompressText(decodeURIComponent(m[1]));
+      const parts = text.split("|");
+      if (parts[0] !== "kv" || !parts[1] || !parts[2]) throw new Error("Ungültiger Link");
+      loadToken++;
+      const token = loadToken;
+      cards = [];
+      cardEls.clear();
+      grid.replaceChildren();
+      emptyNote.hidden = true;
+      showProgress();
+      progressText.textContent = "Lade geteilte Collection …";
+      const res = await fetch(KVDB_URL + "/" + parts[1] + "/" + parts[2], { cache: "no-store" });
+      if (res.status === 404) throw new Error("Diese Collection wird nicht mehr geteilt");
+      if (!res.ok) throw new Error("Speicher antwortet mit Status " + res.status);
+      const payload = await res.json();
+      const entries = (payload.cards || []).map(c => ({
+        qty: parseInt(c[2], 10) || 1,
+        ident: { set: String(c[0]), collector_number: String(c[1]) },
+        raw: c[0] + " " + c[1]
+      }));
+      if (!entries.length) throw new Error("Die geteilte Collection ist leer");
+      const { found } = await resolveEntries(entries, t => { progressText.textContent = t; });
+      if (token !== loadToken) return true;
+      if (!found.length) throw new Error("Keine der Karten konnte geladen werden");
+      sharedView = { name: payload.name || "Geteilte Collection", found: found };
+      const stand = payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("de-DE") : "";
+      document.getElementById("share-title").textContent =
+        "Live geteilt: „" + sharedView.name + "“ (" + found.length + " Karten" +
+        (stand ? " · Stand " + stand : "") + ")";
+      shareBar.hidden = false;
+      addBatch(found.map(f => ({ ...f.card, qty: f.qty })), token);
+      progress.hidden = true;
+      return true;
+    } catch (e) {
+      alert("Der Live-Link konnte nicht geladen werden: " + e.message);
+      clearShareHash();
+      return false;
+    }
   }
 
   function exitCompareUi() {
@@ -1159,6 +1321,9 @@ Counterspell
     document.getElementById("col-add").disabled = none;
     document.getElementById("col-compare").disabled = none || collections.length < 2;
     document.getElementById("col-share").disabled = none;
+    document.getElementById("col-live").disabled = none;
+    document.getElementById("col-live-stop").disabled =
+      none || !liveStore || !liveStore.shares[activeId];
   }
 
   function switchCollection(id) {
@@ -1204,6 +1369,7 @@ Counterspell
     const col = currentCollection();
     if (!col) return;
     if (!confirm('Collection "' + col.name + '" wirklich löschen?')) return;
+    removeLiveShare(col.id); // ggf. Live-Teilen mit beenden
     collections = collections.filter(c => c.id !== col.id);
     saveCollections();
     switchCollection(collections.length ? collections[0].id : null);
@@ -1442,6 +1608,7 @@ Counterspell
         saveCardCache();
         saveCollections();
         switchCollection(col.id); // Ansicht mit neuen Karten neu aufbauen
+        syncLiveShare(col);
       } else {
         // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
         const entryById = new Map();
@@ -1736,6 +1903,8 @@ Counterspell
   document.getElementById("col-create").addEventListener("click", handleModalSubmit);
   document.getElementById("col-delete").addEventListener("click", () => { closeMoreMenu(); deleteCurrentCollection(); });
   document.getElementById("col-share").addEventListener("click", () => { closeMoreMenu(); shareCurrentCollection(); });
+  document.getElementById("col-live").addEventListener("click", () => { closeMoreMenu(); shareLiveCollection(); });
+  document.getElementById("col-live-stop").addEventListener("click", () => { closeMoreMenu(); stopLiveShare(); });
   document.getElementById("col-export").addEventListener("click", () => { closeMoreMenu(); exportCurrentCollection(); });
   document.getElementById("col-import-btn").addEventListener("click", () => {
     closeMoreMenu();
@@ -1805,9 +1974,9 @@ Counterspell
   applyView();
   renderCollectionSelect();
   loadCardmarketPrices();
-  openSharedFromHash().then(handled => {
-    if (!handled) switchCollection(activeId);
-  });
+  openLiveFromHash()
+    .then(handled => handled || openSharedFromHash())
+    .then(handled => { if (!handled) switchCollection(activeId); });
 })();
 </script>
 </body>
