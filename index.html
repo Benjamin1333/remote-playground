@@ -30,6 +30,13 @@
     background: var(--bg);
     color: var(--text);
   }
+
+  /* Layout-Komponenten sind transparente Wrapper: ihre Vorlagen bringen
+     dieselben Klassen/IDs mit wie zuvor, das Styling bleibt unverändert. */
+  mtg-app-header, mtg-collection-bar, mtg-filter-controls, mtg-status-bar,
+  mtg-compare-bar, mtg-share-bar, mtg-progress-bar,
+  mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
+
   header {
     padding: 14px 16px 0;
     text-align: center;
@@ -536,150 +543,191 @@
 </head>
 <body>
 
-<header>
-  <h1>🃏 MTG <span>Collections</span></h1>
-</header>
-
-<div class="collection-bar">
-  <select id="collection-select" aria-label="Collection auswählen"></select>
-  <div class="collection-actions">
-    <button class="bar-btn primary" id="col-new">+ Neu</button>
-    <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
-    <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
-    <div class="more-wrap">
-      <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
-      <div class="more-menu" id="more-menu" hidden>
-        <button id="col-rename">Umbenennen</button>
-        <button id="col-live">Live-Link teilen</button>
-        <button id="col-live-stop">Live-Teilen beenden</button>
-        <button id="col-export">Export als JSON</button>
-        <button id="col-import-btn">Import aus JSON</button>
-        <button id="col-delete" class="danger">Collection löschen</button>
-      </div>
-    </div>
-  </div>
-  <input type="file" id="col-import" accept="application/json,.json" hidden>
-</div>
-
-<div class="controls collapsed" id="controls">
-  <button class="filter-toggle" id="filter-toggle">Filter &amp; Suche ▾</button>
-  <div class="filter-groups">
-  <div class="control-group">
-    <span class="label">Farbe</span>
-    <button class="color-btn" data-color="W" title="Weiß">W</button>
-    <button class="color-btn" data-color="U" title="Blau">U</button>
-    <button class="color-btn" data-color="B" title="Schwarz">B</button>
-    <button class="color-btn" data-color="R" title="Rot">R</button>
-    <button class="color-btn" data-color="G" title="Grün">G</button>
-    <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
-    <button class="color-btn" data-color="C" title="Farblos">C</button>
-  </div>
-  <div class="control-group">
-    <span class="label">Preis €</span>
-    <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
-    <span style="color:var(--muted)">–</span>
-    <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
-  </div>
-  <div class="control-group">
-    <span class="label">Ansicht</span>
-    <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
-    <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
-  </div>
-  <div class="control-group">
-    <span class="label">Sortierung</span>
-    <select id="sort">
-      <option value="number">Sammlernummer</option>
-      <option value="price-desc">Preis absteigend</option>
-      <option value="price-asc">Preis aufsteigend</option>
-      <option value="name">Name A–Z</option>
-    </select>
-  </div>
-  <div class="control-group">
-    <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
-  </div>
-  <div class="control-group">
-    <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
-    <button class="reset-btn" id="reset">Filter zurücksetzen</button>
-  </div>
-  </div>
-</div>
-
-<div class="status-bar" id="status"></div>
-
-<div class="compare-bar" id="compare-bar" hidden>
-  <span class="cmp-title" id="compare-title"></span>
-  <div class="cmp-chips" id="cmp-chips">
-    <button class="cmp-chip active" data-cmp="all">Alle</button>
-    <button class="cmp-chip" data-cmp="both">In beiden</button>
-    <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
-    <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
-  </div>
-  <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
-</div>
-
-<div class="compare-bar" id="share-bar" hidden>
-  <span class="cmp-title" id="share-title"></span>
-  <button class="bar-btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
-  <button class="bar-btn" id="share-close">Schließen</button>
-</div>
-
-<div class="progress-wrap" id="progress">
-  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-  <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
-</div>
+<mtg-app-header></mtg-app-header>
+<mtg-collection-bar></mtg-collection-bar>
+<mtg-filter-controls></mtg-filter-controls>
+<mtg-status-bar></mtg-status-bar>
+<mtg-compare-bar></mtg-compare-bar>
+<mtg-share-bar></mtg-share-bar>
+<mtg-progress-bar></mtg-progress-bar>
 
 <div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
 <div class="grid" id="grid"></div>
 
-<div class="modal-overlay" id="modal-overlay" hidden>
-  <div class="modal">
-    <h2 id="modal-title">Neue Collection anlegen</h2>
-    <div class="row">
-      <div id="col-name-wrap">
-        <label for="col-name">Name der Collection</label>
-        <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
-      </div>
-      <div>
-        <label for="col-set">Set-Code (optional, für Listen mit Sammlernummern)</label>
-        <input type="text" id="col-set" placeholder="z.B. tmt" maxlength="6">
+<mtg-collection-modal></mtg-collection-modal>
+<mtg-compare-modal></mtg-compare-modal>
+<mtg-to-top></mtg-to-top>
+
+<script>
+// =====================================================================
+//  UI-Komponenten (Custom Elements)
+// ---------------------------------------------------------------------
+//  Jede Sektion der Oberfläche ist eine eigene Komponente. Die Layout-
+//  Komponenten rendern reines Markup (Light DOM, kein Shadow DOM), damit
+//  das bestehende CSS unverändert greift, und behalten ihre IDs, sodass
+//  der App-Controller die Elemente weiterhin per getElementById findet.
+// =====================================================================
+
+// Hilfsfunktion für reine Markup-Komponenten ohne eigenes Verhalten.
+function defineTemplate(tag, html) {
+  customElements.define(tag, class extends HTMLElement {
+    connectedCallback() {
+      if (this._rendered) return;
+      this._rendered = true;
+      this.innerHTML = html;
+    }
+  });
+}
+
+defineTemplate("mtg-app-header", `
+  <header>
+    <h1>🃏 MTG <span>Collections</span></h1>
+  </header>`);
+
+defineTemplate("mtg-collection-bar", `
+  <div class="collection-bar">
+    <select id="collection-select" aria-label="Collection auswählen"></select>
+    <div class="collection-actions">
+      <button class="bar-btn primary" id="col-new">+ Neu</button>
+      <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
+      <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
+      <div class="more-wrap">
+        <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
+        <div class="more-menu" id="more-menu" hidden>
+          <button id="col-rename">Umbenennen</button>
+          <button id="col-live">Live-Link teilen</button>
+          <button id="col-live-stop">Live-Teilen beenden</button>
+          <button id="col-export">Export als JSON</button>
+          <button id="col-import-btn">Import aus JSON</button>
+          <button id="col-delete" class="danger">Collection löschen</button>
+        </div>
       </div>
     </div>
-    <div>
-      <label for="col-list">Kartenliste (eine Karte pro Zeile)</label>
-      <textarea id="col-list" placeholder="4 Lightning Bolt
+    <input type="file" id="col-import" accept="application/json,.json" hidden>
+  </div>`);
+
+defineTemplate("mtg-filter-controls", `
+  <div class="controls collapsed" id="controls">
+    <button class="filter-toggle" id="filter-toggle">Filter &amp; Suche ▾</button>
+    <div class="filter-groups">
+    <div class="control-group">
+      <span class="label">Farbe</span>
+      <button class="color-btn" data-color="W" title="Weiß">W</button>
+      <button class="color-btn" data-color="U" title="Blau">U</button>
+      <button class="color-btn" data-color="B" title="Schwarz">B</button>
+      <button class="color-btn" data-color="R" title="Rot">R</button>
+      <button class="color-btn" data-color="G" title="Grün">G</button>
+      <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
+      <button class="color-btn" data-color="C" title="Farblos">C</button>
+    </div>
+    <div class="control-group">
+      <span class="label">Preis €</span>
+      <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
+      <span style="color:var(--muted)">–</span>
+      <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
+    </div>
+    <div class="control-group">
+      <span class="label">Ansicht</span>
+      <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
+      <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
+    </div>
+    <div class="control-group">
+      <span class="label">Sortierung</span>
+      <select id="sort">
+        <option value="number">Sammlernummer</option>
+        <option value="price-desc">Preis absteigend</option>
+        <option value="price-asc">Preis aufsteigend</option>
+        <option value="name">Name A–Z</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
+    </div>
+    <div class="control-group">
+      <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
+      <button class="reset-btn" id="reset">Filter zurücksetzen</button>
+    </div>
+    </div>
+  </div>`);
+
+defineTemplate("mtg-status-bar", `<div class="status-bar" id="status"></div>`);
+
+defineTemplate("mtg-compare-bar", `
+  <div class="compare-bar" id="compare-bar" hidden>
+    <span class="cmp-title" id="compare-title"></span>
+    <div class="cmp-chips" id="cmp-chips">
+      <button class="cmp-chip active" data-cmp="all">Alle</button>
+      <button class="cmp-chip" data-cmp="both">In beiden</button>
+      <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
+      <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
+    </div>
+    <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
+  </div>`);
+
+defineTemplate("mtg-share-bar", `
+  <div class="compare-bar" id="share-bar" hidden>
+    <span class="cmp-title" id="share-title"></span>
+    <button class="bar-btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
+    <button class="bar-btn" id="share-close">Schließen</button>
+  </div>`);
+
+defineTemplate("mtg-progress-bar", `
+  <div class="progress-wrap" id="progress">
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
+  </div>`);
+
+defineTemplate("mtg-collection-modal", `
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal">
+      <h2 id="modal-title">Neue Collection anlegen</h2>
+      <div class="row">
+        <div id="col-name-wrap">
+          <label for="col-name">Name der Collection</label>
+          <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
+        </div>
+        <div>
+          <label for="col-set">Set-Code (optional, für Listen mit Sammlernummern)</label>
+          <input type="text" id="col-set" placeholder="z.B. tmt" maxlength="6">
+        </div>
+      </div>
+      <div>
+        <label for="col-list">Kartenliste (eine Karte pro Zeile)</label>
+        <textarea id="col-list" placeholder="4 Lightning Bolt
 1 Leonardo, Sewer Samurai (TMT) 17
 Counterspell
 0017 Leonardo, Sewer Samurai M   ← mit Set-Code"></textarea>
-      <p class="hint">
-        Unterstützte Formate: <code>4 Name</code>, <code>4x Name</code>, nur der Kartenname,
-        Arena/Moxfield-Export <code>1 Name (SET) 123</code> sowie Set-Listen mit Sammlernummer
-        (<code>0017 Name …</code> – dann oben den Set-Code angeben).
-        Markdown-Checkboxen (<code>- [x]</code>) und Kommentarzeilen (<code>#</code>, <code>//</code>) werden ignoriert.
-      </p>
+        <p class="hint">
+          Unterstützte Formate: <code>4 Name</code>, <code>4x Name</code>, nur der Kartenname,
+          Arena/Moxfield-Export <code>1 Name (SET) 123</code> sowie Set-Listen mit Sammlernummer
+          (<code>0017 Name …</code> – dann oben den Set-Code angeben).
+          Markdown-Checkboxen (<code>- [x]</code>) und Kommentarzeilen (<code>#</code>, <code>//</code>) werden ignoriert.
+        </p>
+      </div>
+      <div class="status" id="col-status"></div>
+      <div class="buttons">
+        <button class="bar-btn" id="col-cancel">Abbrechen</button>
+        <button class="bar-btn primary" id="col-create">Collection erstellen</button>
+      </div>
     </div>
-    <div class="status" id="col-status"></div>
-    <div class="buttons">
-      <button class="bar-btn" id="col-cancel">Abbrechen</button>
-      <button class="bar-btn primary" id="col-create">Collection erstellen</button>
+  </div>`);
+
+defineTemplate("mtg-compare-modal", `
+  <div class="modal-overlay" id="compare-overlay" hidden>
+    <div class="modal modal-small">
+      <h2>Collections vergleichen</h2>
+      <p class="hint" id="compare-hint"></p>
+      <select id="compare-select" aria-label="Collection zum Vergleich"></select>
+      <div class="buttons">
+        <button class="bar-btn" id="compare-cancel">Abbrechen</button>
+        <button class="bar-btn primary" id="compare-start">Vergleichen</button>
+      </div>
     </div>
-  </div>
-</div>
+  </div>`);
 
-<div class="modal-overlay" id="compare-overlay" hidden>
-  <div class="modal modal-small">
-    <h2>Collections vergleichen</h2>
-    <p class="hint" id="compare-hint"></p>
-    <select id="compare-select" aria-label="Collection zum Vergleich"></select>
-    <div class="buttons">
-      <button class="bar-btn" id="compare-cancel">Abbrechen</button>
-      <button class="bar-btn primary" id="compare-start">Vergleichen</button>
-    </div>
-  </div>
-</div>
+defineTemplate("mtg-to-top",
+  `<button class="to-top" id="to-top" hidden aria-label="Nach oben scrollen" title="Nach oben">↑</button>`);
 
-<button class="to-top" id="to-top" hidden aria-label="Nach oben scrollen" title="Nach oben">↑</button>
-
-<script>
 (function () {
   // ===== Konstanten =====
   const COLLECTION_API = "https://api.scryfall.com/cards/collection";
@@ -697,7 +745,7 @@ Counterspell
 
   // ===== Zustand =====
   let cards = [];
-  const cardEls = new Map(); // card.id -> DOM-Element (pro Collection-Ansicht)
+  const cardEls = new Map(); // card.id -> <mtg-card>-Element (pro Collection-Ansicht)
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
   const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false, compareFilter: "all" };
 
@@ -819,7 +867,7 @@ Counterspell
     card.trend = typeof p.trend === "number" ? p.trend : null;
     card.isCm = true;
     const el = cardEls.get(card.id);
-    if (el) el.querySelector(".price-line").innerHTML = priceHtml(card);
+    if (el) el.refreshPrice();
   }
 
   // ===== Laden: Collection =====
@@ -1616,36 +1664,55 @@ Counterspell
     return html;
   }
 
-  function buildCardEl(card) {
-    const el = document.createElement("div");
-    el.className = "card";
-    el.innerHTML =
-      '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
-        card.name.replace(/"/g, "&quot;") + '">' +
-        '<img loading="lazy" decoding="async"' +
-        ' src="' + card.image + '"' +
-        (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
-        ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
-      "</a>" +
-      (card.compare
-        ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
-        : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
-      '<div class="info">' +
-        '<div class="name-row">' +
-          '<div class="name">' + card.name + "</div>" +
-          '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") +
-            '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
-            favorites.has(card.id) + '">' +
-            (favorites.has(card.id) ? "★" : "☆") +
-          "</button>" +
-        "</div>" +
-        '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
-          ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
-          (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
-        '<div class="price-line">' + priceHtml(card) + "</div>" +
-      "</div>";
-    el.querySelector(".fav-btn").addEventListener("click", e => {
-      const btn = e.currentTarget;
+  // ---- Komponente: eine einzelne Kartenkachel ----
+  // Das Element ist selbst die Grid-Kachel (Klasse "card"), kapselt sein
+  // Rendering und die Favoriten-Interaktion und bietet kleine Methoden,
+  // mit denen der Controller Preis, Sichtbarkeit und Reihenfolge steuert,
+  // ohne die <img>-Elemente neu zu erzeugen.
+  class MtgCard extends HTMLElement {
+    set card(data) { this._card = data; if (this.isConnected) this.render(); }
+    get card() { return this._card; }
+
+    connectedCallback() {
+      if (!this._rendered) this.render();
+    }
+
+    render() {
+      const card = this._card;
+      if (!card) return;
+      this.classList.add("card");
+      this.innerHTML =
+        '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
+          card.name.replace(/"/g, "&quot;") + '">' +
+          '<img loading="lazy" decoding="async"' +
+          ' src="' + card.image + '"' +
+          (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
+          ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
+        "</a>" +
+        (card.compare
+          ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
+          : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
+        '<div class="info">' +
+          '<div class="name-row">' +
+            '<div class="name">' + card.name + "</div>" +
+            '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") +
+              '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
+              favorites.has(card.id) + '">' +
+              (favorites.has(card.id) ? "★" : "☆") +
+            "</button>" +
+          "</div>" +
+          '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
+            ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+            (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
+          '<div class="price-line">' + priceHtml(card) + "</div>" +
+        "</div>";
+      this.querySelector(".fav-btn").addEventListener("click", () => this.toggleFav());
+      this._rendered = true;
+    }
+
+    toggleFav() {
+      const card = this._card;
+      const btn = this.querySelector(".fav-btn");
       if (favorites.has(card.id)) {
         favorites.delete(card.id);
         btn.classList.remove("faved");
@@ -1659,7 +1726,21 @@ Counterspell
       }
       saveFavorites();
       applyFilters();
-    });
+    }
+
+    refreshPrice() {
+      const line = this.querySelector(".price-line");
+      if (line) line.innerHTML = priceHtml(this._card);
+    }
+
+    setFiltered(hidden) { this.classList.toggle("filtered-out", hidden); }
+    setOrder(n) { this.style.order = n; }
+  }
+  customElements.define("mtg-card", MtgCard);
+
+  function buildCardEl(card) {
+    const el = document.createElement("mtg-card");
+    el.card = card;
     return el;
   }
 
@@ -1726,8 +1807,8 @@ Counterspell
       const el = cardEls.get(card.id);
       if (!el) continue;
       const show = matchesFilters(card);
-      el.classList.toggle("filtered-out", !show);
-      el.style.order = i;
+      el.setFiltered(!show);
+      el.setOrder(i);
       if (show) {
         visible++;
         if (card.price !== null) value += card.price * (card.qty || 1);
