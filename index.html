@@ -17,6 +17,11 @@
     --border: #2e3a44;
   }
   * { box-sizing: border-box; }
+  html, body {
+    overflow-x: hidden;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+  }
   body {
     margin: 0;
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -223,7 +228,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
     gap: 18px;
     padding: 8px 24px 48px;
     max-width: 1700px;
@@ -324,7 +329,7 @@
 
   /* Kompakte Galerieansicht: kleinere Kacheln, gleiche Infos */
   .grid.gallery {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
     gap: 10px;
   }
   .grid.gallery .card {
