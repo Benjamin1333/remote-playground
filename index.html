@@ -78,6 +78,26 @@
     justify-content: center;
     margin-top: 16px;
   }
+  /* Auf dem Desktop verhält sich der Wrapper wie nicht vorhanden */
+  .filter-groups {
+    display: contents;
+  }
+  .filter-toggle {
+    display: none;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.92rem;
+    cursor: pointer;
+    width: 100%;
+  }
+  @media (max-width: 700px) {
+    .filter-toggle { display: block; }
+    .controls.collapsed .filter-groups { display: none; }
+    .controls { padding: 10px 16px; gap: 10px; }
+  }
   .control-group {
     display: flex;
     align-items: center;
@@ -421,7 +441,9 @@
   <button class="bar-btn" id="col-delete">Löschen</button>
 </div>
 
-<div class="controls">
+<div class="controls collapsed" id="controls">
+  <button class="filter-toggle" id="filter-toggle">Filter &amp; Suche ▾</button>
+  <div class="filter-groups">
   <div class="control-group">
     <span class="label">Farbe</span>
     <button class="color-btn" data-color="W" title="Weiß">W</button>
@@ -458,6 +480,7 @@
   <div class="control-group">
     <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
     <button class="reset-btn" id="reset">Filter zurücksetzen</button>
+  </div>
   </div>
 </div>
 
@@ -516,6 +539,7 @@ Counterspell
   const CARD_CACHE_KEY = "mtg-card-cache-v1";
   const ACTIVE_KEY = "mtg-active-collection-v1";
   const VIEW_KEY = "mtg-view-v1";
+  const FILTERS_OPEN_KEY = "mtg-filters-open-v1";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
@@ -1113,6 +1137,23 @@ Counterspell
     }
     emptyNote.hidden = visible > 0 || cards.length === 0;
     updateStatus(visible, value);
+    updateFilterToggle();
+  }
+
+  function activeFilterCount() {
+    return filters.colors.size +
+      (filters.priceMin !== null ? 1 : 0) +
+      (filters.priceMax !== null ? 1 : 0) +
+      (filters.search ? 1 : 0) +
+      (filters.favsOnly ? 1 : 0) +
+      (filters.sort !== "number" ? 1 : 0);
+  }
+
+  function updateFilterToggle() {
+    const open = !controlsEl.classList.contains("collapsed");
+    const n = activeFilterCount();
+    filterToggle.textContent = (open ? "Filter ausblenden ▴" : "Filter & Suche ▾") +
+      (n ? " (" + n + " aktiv)" : "");
   }
 
   function addBatch(batch, token) {
@@ -1131,6 +1172,15 @@ Counterspell
   }
 
   // ===== Steuerelemente verdrahten =====
+  const controlsEl = document.getElementById("controls");
+  const filterToggle = document.getElementById("filter-toggle");
+  if (localStorage.getItem(FILTERS_OPEN_KEY) === "1") controlsEl.classList.remove("collapsed");
+  filterToggle.addEventListener("click", () => {
+    const collapsed = controlsEl.classList.toggle("collapsed");
+    localStorage.setItem(FILTERS_OPEN_KEY, collapsed ? "0" : "1");
+    updateFilterToggle();
+  });
+
   document.querySelectorAll(".color-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const c = btn.dataset.color;
