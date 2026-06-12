@@ -36,6 +36,26 @@ Entscheidung, keine Nachlässigkeit (siehe Technologie-Entscheidungen).
   Collection-Verwaltung, Filter. Komponenten werden vor dem Controller
   registriert (synchrones Upgrade), daher findet `getElementById` alles.
 
+### Responsive Layout (Stand Phase 1 des UI-Redesigns)
+
+- **Desktop ≥ 1024px:** persistente Filter-Sidebar links (`.app-layout` als
+  Grid, `aside.filter-panel` sticky), alles sichtbar – keine versteckten
+  Controls.
+- **Mobil/Tablet < 1024px:** Sidebar versteckt. Die **selben** Filter-Elemente
+  (`.filter-groups`) wandern per `matchMedia`-Listener in ein natives
+  `<dialog>`-Bottom-Sheet (`<mtg-filter-sheet>`); Listener bleiben erhalten,
+  IDs ändern sich nicht. Geöffnet über die fixe Leiste `<mtg-filter-bar>`
+  in der Daumen-Zone (mit Aktiv-Zähler und Ergebnis-Zähler); der
+  Sheet-Apply-Button zeigt live „Zeige N Karten“.
+- **Aktive Filter** erscheinen mobil als entfernbare Chips
+  (`<mtg-filter-chips>`, vom Controller über `render()` befüllt).
+- **Breakpoints:** 1024px (Sidebar ↔ Sheet), 600px (Grid 2-spaltig kompakt).
+  Touch-Ziele < 1024px: min. 44px (Apple HIG/WCAG 2.5.5). Safe-Area-Insets
+  (`env(safe-area-inset-bottom)`) an fixer Leiste, Sheet-Footer und To-Top.
+- **Bewusster Trade-off:** Pinch-/Doppeltipp-Zoom ist absichtlich deaktiviert
+  (App-Gefühl); axe meldet das als `meta-viewport`. Nicht „fixen“, ohne die
+  Produktentscheidung zu revidieren.
+
 ### Datenmodell
 
 - Collections in `localStorage` (`mtg-collections-v1`):

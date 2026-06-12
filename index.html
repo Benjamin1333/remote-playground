@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>MTG Collections</title>
 <style>
   :root {
@@ -37,8 +37,8 @@
   /* Layout-Komponenten sind transparente Wrapper: ihre Vorlagen bringen
      dieselben Klassen/IDs mit wie zuvor, das Styling bleibt unverändert. */
   mtg-app-header, mtg-collection-bar, mtg-filter-controls, mtg-status-bar,
-  mtg-compare-bar, mtg-share-bar, mtg-progress-bar,
-  mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
+  mtg-compare-bar, mtg-share-bar, mtg-progress-bar, mtg-filter-bar,
+  mtg-filter-sheet, mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
 
   header {
     padding: 14px 16px 0;
@@ -185,64 +185,185 @@
 
   .modal-small { max-width: 420px; }
 
-  /* Mobile: größere Touch-Ziele, 16px-Inputs gegen iOS-Auto-Zoom */
-  @media (max-width: 700px) {
+  /* Touch-Geräte/Mobil & Tablet: 44px-Touch-Ziele (Apple HIG / WCAG 2.5.5),
+     16px-Inputs gegen iOS-Auto-Zoom, Platz für die fixe Filter-Leiste */
+  @media (max-width: 1023.98px) {
     input[type="number"], input[type="search"], input[type="text"], select, textarea {
       font-size: 16px;
     }
-    .color-btn { width: 42px; height: 42px; }
-    .btn, .cmp-chip { min-height: 42px; }
-    .grid { padding: 8px 12px 48px; gap: 12px; }
+    .color-btn { width: 44px; height: 44px; }
+    .btn, .cmp-chip { min-height: 44px; }
+    .grid { padding: 8px 12px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
+    .empty-note { padding-bottom: 110px; }
+    .to-top { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
 
-  .controls {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    padding: 12px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: center;
-    justify-content: center;
-    margin-top: 16px;
+  /* ===== Responsive App-Layout =====
+     Desktop (≥1024px): persistente Filter-Sidebar links neben dem Inhalt.
+     Mobil/Tablet: Sidebar versteckt; die Filter-Gruppen wandern per JS in
+     das Bottom-Sheet, geöffnet über die fixe Leiste in der Daumen-Zone. */
+  .app-layout { display: block; }
+  .content { min-width: 0; }
+  .filter-panel { display: none; }
+  @media (min-width: 1024px) {
+    .app-layout {
+      display: grid;
+      grid-template-columns: 264px minmax(0, 1fr);
+    }
+    .filter-panel {
+      display: block;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100dvh;
+      overflow-y: auto;
+      padding: 18px 16px 28px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+    }
   }
-  /* Auf dem Desktop verhält sich der Wrapper wie nicht vorhanden */
   .filter-groups {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
-  .filter-toggle {
-    display: none;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: var(--radius);
-    padding: 9px 12px;
-    font-size: 0.92rem;
-    cursor: pointer;
-    width: 100%;
-  }
-  @media (max-width: 700px) {
-    .filter-toggle { display: block; }
-    .controls.collapsed .filter-groups { display: none; }
-    .controls { padding: 10px 16px; gap: 10px; }
-  }
+  .filter-groups input[type="search"],
+  .filter-groups select { width: 100%; }
+  .filter-groups input[type="number"] { flex: 1; min-width: 0; width: 90px; }
   .control-group {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    flex-wrap: wrap;
   }
   .control-group .label {
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--muted);
+  }
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Fixe Filter-Leiste (nur mobil/Tablet) – sitzt in der Daumen-Zone */
+  .filter-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(26, 33, 40, 0.92);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+  }
+  .filter-bar .btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 44px;
+  }
+  .filter-bar .bar-count { color: var(--muted); font-size: 0.84rem; }
+  @media (min-width: 1024px) {
+    .filter-bar { display: none; }
+  }
+
+  /* Bottom-Sheet (natives <dialog>): Grid bleibt hinter dem Scrim sichtbar */
+  dialog.sheet {
+    width: 100%;
+    max-width: 640px;
+    margin: auto auto 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    background: var(--panel);
+    color: var(--text);
+    max-height: 85dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  dialog.sheet:not([open]) { display: none; }
+  dialog.sheet::backdrop { background: rgba(6, 9, 12, 0.45); }
+  body:has(dialog.sheet[open]) { overflow: hidden; }
+  .sheet-header {
+    position: relative;
+    padding: 18px 16px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sheet-header h2 { margin: 0; font-size: 1rem; }
+  .sheet-header .grabber {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    translate: -50% 0;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+  .sheet-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    border-radius: var(--radius);
+  }
+  .sheet-close:hover { color: var(--text); }
+  .sheet-body {
+    overflow-y: auto;
+    padding: 16px;
+    flex: 1;
+  }
+  .sheet-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+  }
+  .sheet-footer .btn { width: 100%; min-height: 46px; }
+
+  /* Aktive Filter als entfernbare Chips über dem Grid (nur mobil/Tablet) */
+  .chips-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 16px 10px;
+    scrollbar-width: none;
+  }
+  .chips-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--panel-2);
+    border: 1px solid var(--accent-2);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 0.82rem;
+    min-height: 38px;
+    cursor: pointer;
+  }
+  .chip .x { color: var(--muted); }
+  .chip:hover .x { color: var(--text); }
+  .chip.clear { border-color: var(--border); color: var(--muted); }
+  .chips-row[hidden] { display: none; }
+  @media (min-width: 1024px) {
+    mtg-filter-chips { display: none; }
   }
   .color-btn {
     width: 34px;
@@ -450,6 +571,20 @@
     font-size: 0.74rem;
   }
 
+  /* Schmale Screens: 2 Spalten statt einer Riesen-Kachel – mehr Scan-Dichte.
+     Steht nach den .grid-/Galerie-Regeln, um sie bei gleicher Spezifität zu
+     überschreiben. */
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); }
+    .card .info { padding: 8px 9px 10px; gap: 3px; }
+    .card .name { font-size: 0.8rem; }
+    .card .meta { font-size: 0.68rem; }
+    .card .price { font-size: 0.84rem; }
+    .card .price small { font-size: 0.66rem; }
+    .card .cm-link { font-size: 0.66rem; }
+    .qty-badge { top: 6px; left: 6px; padding: 2px 6px; font-size: 0.74rem; }
+  }
+
   .rarity-C { color: #c7c1b8; }
   .rarity-U { color: #b3c7d1; }
   .rarity-R { color: #e0b860; }
@@ -532,15 +667,22 @@
 
 <mtg-app-header></mtg-app-header>
 <mtg-collection-bar></mtg-collection-bar>
-<mtg-filter-controls></mtg-filter-controls>
-<mtg-status-bar></mtg-status-bar>
-<mtg-compare-bar></mtg-compare-bar>
-<mtg-share-bar></mtg-share-bar>
-<mtg-progress-bar></mtg-progress-bar>
 
-<div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
-<div class="grid" id="grid"></div>
+<div class="app-layout">
+  <mtg-filter-controls></mtg-filter-controls>
+  <main class="content">
+    <mtg-status-bar></mtg-status-bar>
+    <mtg-compare-bar></mtg-compare-bar>
+    <mtg-share-bar></mtg-share-bar>
+    <mtg-filter-chips hidden></mtg-filter-chips>
+    <mtg-progress-bar></mtg-progress-bar>
+    <div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
+    <div class="grid" id="grid"></div>
+  </main>
+</div>
 
+<mtg-filter-bar></mtg-filter-bar>
+<mtg-filter-sheet></mtg-filter-sheet>
 <mtg-collection-modal></mtg-collection-modal>
 <mtg-compare-modal></mtg-compare-modal>
 <mtg-to-top></mtg-to-top>
@@ -594,49 +736,81 @@ defineTemplate("mtg-collection-bar", `
   </div>`);
 
 defineTemplate("mtg-filter-controls", `
-  <div class="controls collapsed" id="controls">
-    <button class="filter-toggle" id="filter-toggle">Filter &amp; Suche ▾</button>
+  <aside class="filter-panel" id="controls" aria-label="Filter und Sortierung">
     <div class="filter-groups">
-    <div class="control-group">
-      <span class="label">Farbe</span>
-      <button class="color-btn" data-color="W" title="Weiß">W</button>
-      <button class="color-btn" data-color="U" title="Blau">U</button>
-      <button class="color-btn" data-color="B" title="Schwarz">B</button>
-      <button class="color-btn" data-color="R" title="Rot">R</button>
-      <button class="color-btn" data-color="G" title="Grün">G</button>
-      <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
-      <button class="color-btn" data-color="C" title="Farblos">C</button>
+      <div class="control-group">
+        <div class="control-row">
+          <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Farbe</span>
+        <div class="control-row">
+          <button class="color-btn" data-color="W" title="Weiß">W</button>
+          <button class="color-btn" data-color="U" title="Blau">U</button>
+          <button class="color-btn" data-color="B" title="Schwarz">B</button>
+          <button class="color-btn" data-color="R" title="Rot">R</button>
+          <button class="color-btn" data-color="G" title="Grün">G</button>
+          <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
+          <button class="color-btn" data-color="C" title="Farblos">C</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Preis €</span>
+        <div class="control-row">
+          <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
+          <span style="color:var(--muted)">–</span>
+          <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Sortierung</span>
+        <div class="control-row">
+          <select id="sort" aria-label="Sortierung">
+            <option value="number">Sammlernummer</option>
+            <option value="price-desc">Preis absteigend</option>
+            <option value="price-asc">Preis aufsteigend</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Ansicht</span>
+        <div class="control-row">
+          <button class="btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
+          <button class="btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
+          <button class="btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <div class="control-row">
+          <button class="btn gold" id="fav-filter">★ Nur Favoriten</button>
+          <button class="reset-btn" id="reset">Filter zurücksetzen</button>
+        </div>
+      </div>
     </div>
-    <div class="control-group">
-      <span class="label">Preis €</span>
-      <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
-      <span style="color:var(--muted)">–</span>
-      <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
-    </div>
-    <div class="control-group">
-      <span class="label">Ansicht</span>
-      <button class="btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
-      <button class="btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
-      <button class="btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
-    </div>
-    <div class="control-group">
-      <span class="label">Sortierung</span>
-      <select id="sort">
-        <option value="number">Sammlernummer</option>
-        <option value="price-desc">Preis absteigend</option>
-        <option value="price-asc">Preis aufsteigend</option>
-        <option value="name">Name A–Z</option>
-      </select>
-    </div>
-    <div class="control-group">
-      <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
-    </div>
-    <div class="control-group">
-      <button class="btn gold" id="fav-filter">★ Nur Favoriten</button>
-      <button class="reset-btn" id="reset">Filter zurücksetzen</button>
-    </div>
-    </div>
+  </aside>`);
+
+defineTemplate("mtg-filter-bar", `
+  <div class="filter-bar">
+    <button class="btn" id="filter-toggle" aria-haspopup="dialog">
+      <span id="filter-toggle-label">⚙ Filter &amp; Sortieren</span>
+      <span class="bar-count" id="filter-toggle-count"></span>
+    </button>
   </div>`);
+
+defineTemplate("mtg-filter-sheet", `
+  <dialog class="sheet" id="filter-sheet" aria-label="Filter und Sortierung">
+    <div class="sheet-header">
+      <div class="grabber" aria-hidden="true"></div>
+      <h2>Filter &amp; Sortieren</h2>
+      <button class="sheet-close" id="filter-sheet-close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="sheet-body" id="filter-sheet-body"></div>
+    <div class="sheet-footer">
+      <button class="btn primary" id="filter-sheet-apply">Zeige alle Karten</button>
+    </div>
+  </dialog>`);
 
 defineTemplate("mtg-status-bar", `<div class="status-bar" id="status"></div>`);
 
@@ -727,7 +901,6 @@ defineTemplate("mtg-to-top",
   const ACTIVE_KEY = "mtg-active-collection-v1";
   const VIEW_KEY = "mtg-view-v1";
   const GROUP_KEY = "mtg-group-v1";
-  const FILTERS_OPEN_KEY = "mtg-filters-open-v1";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
@@ -1373,13 +1546,13 @@ defineTemplate("mtg-to-top",
         '<br><br><button class="btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
       document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
       emptyNote.hidden = false;
-      updateStatus(0, 0, 0);
+      applyFilters();
       return;
     }
     emptyNote.textContent = "Keine Karten gefunden – Filter anpassen.";
     emptyNote.hidden = true;
     showProgress();
-    updateStatus(0, 0, 0);
+    applyFilters();
     loadCollectionCards(col, token)
       .then(() => { if (token === loadToken) progress.hidden = true; })
       .catch(err => {
@@ -1824,6 +1997,34 @@ defineTemplate("mtg-to-top",
     return el;
   }
 
+  // ---- Komponente: Zeile mit aktiven Filter-Chips ----
+  // Bekommt vom Controller die Chip-Liste; jeder Chip entfernt beim Tippen
+  // seinen Filter. Versteckt sich selbst, wenn keine Filter aktiv sind.
+  class MtgFilterChips extends HTMLElement {
+    connectedCallback() { this.classList.add("chips-row"); }
+
+    render(chips, onClearAll) {
+      this.replaceChildren();
+      this.hidden = chips.length === 0;
+      for (const chip of chips) {
+        const btn = document.createElement("button");
+        btn.className = "chip";
+        btn.innerHTML = escapeHtml(chip.label) + ' <span class="x" aria-hidden="true">✕</span>';
+        btn.setAttribute("aria-label", "Filter entfernen: " + chip.label);
+        btn.addEventListener("click", chip.remove);
+        this.appendChild(btn);
+      }
+      if (chips.length) {
+        const clear = document.createElement("button");
+        clear.className = "chip clear";
+        clear.textContent = "Alle löschen";
+        clear.addEventListener("click", onClearAll);
+        this.appendChild(clear);
+      }
+    }
+  }
+  customElements.define("mtg-filter-chips", MtgFilterChips);
+
   function matchesColorFilter(card) {
     if (filters.colors.size === 0) return true;
     const isMulti = card.colors.length > 1;
@@ -1920,7 +2121,8 @@ defineTemplate("mtg-to-top",
     // Ohne Collection bleibt der Hinweis mit CTA sichtbar
     emptyNote.hidden = visibleTiles > 0 || (cards.length === 0 && !!currentCollection());
     updateStatus(visibleQty, totalQty, value);
-    updateFilterToggle();
+    updateFilterSummary(visibleQty, totalQty);
+    renderFilterChips();
   }
 
   function activeFilterCount() {
@@ -1932,11 +2134,49 @@ defineTemplate("mtg-to-top",
       (filters.sort !== "number" ? 1 : 0);
   }
 
-  function updateFilterToggle() {
-    const open = !controlsEl.classList.contains("collapsed");
+  // Zähler auf Filter-Leiste und Sheet-Button aktuell halten
+  function updateFilterSummary(visibleQty, totalQty) {
     const n = activeFilterCount();
-    filterToggle.textContent = (open ? "Filter ausblenden ▴" : "Filter & Suche ▾") +
-      (n ? " (" + n + " aktiv)" : "");
+    document.getElementById("filter-toggle-label").textContent =
+      "⚙ Filter & Sortieren" + (n ? " (" + n + ")" : "");
+    document.getElementById("filter-toggle-count").textContent =
+      totalQty ? visibleQty + " / " + totalQty + " Karten" : "";
+    document.getElementById("filter-sheet-apply").textContent =
+      "Zeige " + visibleQty + " Karten";
+  }
+
+  // Aktive Filter als entfernbare Chips (mobil; Desktop zeigt die Sidebar)
+  const COLOR_NAME = { W: "Weiß", U: "Blau", B: "Schwarz", R: "Rot", G: "Grün", M: "Mehrfarbig", C: "Farblos" };
+  const SORT_CHIP = { "price-desc": "Preis absteigend", "price-asc": "Preis aufsteigend", "name": "Name A–Z" };
+  function renderFilterChips() {
+    const chips = [];
+    for (const c of filters.colors) {
+      chips.push({
+        label: COLOR_NAME[c] || c,
+        remove: () => document.querySelector('.color-btn[data-color="' + c + '"]').click()
+      });
+    }
+    if (filters.priceMin !== null) chips.push({
+      label: "ab " + formatEur(filters.priceMin),
+      remove: () => { filters.priceMin = null; document.getElementById("price-min").value = ""; applyFilters(); }
+    });
+    if (filters.priceMax !== null) chips.push({
+      label: "bis " + formatEur(filters.priceMax),
+      remove: () => { filters.priceMax = null; document.getElementById("price-max").value = ""; applyFilters(); }
+    });
+    if (filters.search) chips.push({
+      label: "„" + filters.search + "“",
+      remove: () => { filters.search = ""; document.getElementById("search").value = ""; applyFilters(); }
+    });
+    if (filters.favsOnly) chips.push({
+      label: "★ Favoriten",
+      remove: () => document.getElementById("fav-filter").click()
+    });
+    if (filters.sort !== "number") chips.push({
+      label: SORT_CHIP[filters.sort] || filters.sort,
+      remove: () => { filters.sort = "number"; document.getElementById("sort").value = "number"; applyFilters(); }
+    });
+    document.querySelector("mtg-filter-chips").render(chips, resetFilters);
   }
 
   function addBatch(batch, token) {
@@ -1957,14 +2197,31 @@ defineTemplate("mtg-to-top",
   }
 
   // ===== Steuerelemente verdrahten =====
-  const controlsEl = document.getElementById("controls");
-  const filterToggle = document.getElementById("filter-toggle");
-  if (localStorage.getItem(FILTERS_OPEN_KEY) === "1") controlsEl.classList.remove("collapsed");
-  filterToggle.addEventListener("click", () => {
-    const collapsed = controlsEl.classList.toggle("collapsed");
-    localStorage.setItem(FILTERS_OPEN_KEY, collapsed ? "0" : "1");
-    updateFilterToggle();
-  });
+  // Responsive Platzierung: die Filter-Gruppen wandern zwischen Sidebar
+  // (Desktop) und Bottom-Sheet (mobil). Es sind dieselben DOM-Elemente,
+  // alle Event-Listener bleiben dabei erhalten.
+  const filterPanel = document.getElementById("controls");
+  const filterGroupsEl = document.querySelector(".filter-groups");
+  const filterSheet = document.getElementById("filter-sheet");
+  const filterSheetBody = document.getElementById("filter-sheet-body");
+  const desktopLayout = matchMedia("(min-width: 1024px)");
+  function placeFilterGroups() {
+    if (desktopLayout.matches) {
+      if (filterSheet.open) filterSheet.close();
+      if (filterGroupsEl.parentElement !== filterPanel) filterPanel.appendChild(filterGroupsEl);
+    } else if (filterGroupsEl.parentElement !== filterSheetBody) {
+      filterSheetBody.appendChild(filterGroupsEl);
+    }
+  }
+  desktopLayout.addEventListener("change", placeFilterGroups);
+  placeFilterGroups();
+  localStorage.removeItem("mtg-filters-open-v1"); // obsolet seit Sidebar/Sheet
+
+  document.getElementById("filter-toggle").addEventListener("click", () => filterSheet.showModal());
+  document.getElementById("filter-sheet-close").addEventListener("click", () => filterSheet.close());
+  document.getElementById("filter-sheet-apply").addEventListener("click", () => filterSheet.close());
+  // Tipp auf den Scrim schließt das Sheet (Klickziel ist dann der <dialog> selbst)
+  filterSheet.addEventListener("click", e => { if (e.target === filterSheet) filterSheet.close(); });
 
   document.querySelectorAll(".color-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1999,7 +2256,7 @@ defineTemplate("mtg-to-top",
     e.currentTarget.classList.toggle("active", filters.favsOnly);
     applyFilters();
   });
-  document.getElementById("reset").addEventListener("click", () => {
+  function resetFilters() {
     filters.colors.clear();
     filters.priceMin = filters.priceMax = null;
     filters.sort = "number";
@@ -2012,7 +2269,8 @@ defineTemplate("mtg-to-top",
     document.getElementById("search").value = "";
     document.getElementById("fav-filter").classList.remove("active");
     applyFilters();
-  });
+  }
+  document.getElementById("reset").addEventListener("click", resetFilters);
 
   let view = localStorage.getItem(VIEW_KEY) === "gallery" ? "gallery" : "detail";
   function applyView() {
