@@ -839,6 +839,11 @@ defineTemplate("mtg-to-top",
     return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
   }
 
+  // Physische Stückzahl einer Collection (nicht nur verschiedene Drucke)
+  function countCards(entries) {
+    return entries.reduce((s, e) => s + (e.qty || 1), 0);
+  }
+
   // ===== Cardmarket-Preise (prices.json aus dem offiziellen Price Guide) =====
   async function loadCardmarketPrices() {
     try {
@@ -1191,7 +1196,7 @@ defineTemplate("mtg-to-top",
       if (c.id === a.id) continue;
       const opt = document.createElement("option");
       opt.value = c.id;
-      opt.textContent = c.name + " (" + c.entries.length + " Karten)";
+      opt.textContent = c.name + " (" + countCards(c.entries) + " Karten)";
       sel.appendChild(opt);
     }
     document.getElementById("compare-hint").textContent =
@@ -1297,7 +1302,7 @@ defineTemplate("mtg-to-top",
     for (const col of collections) {
       const opt = document.createElement("option");
       opt.value = col.id;
-      opt.textContent = col.name + " (" + col.entries.length + " Karten)";
+      opt.textContent = col.name + " (" + countCards(col.entries) + " Karten)";
       colSelect.appendChild(opt);
     }
     colSelect.value = activeId || "";
@@ -1331,13 +1336,13 @@ defineTemplate("mtg-to-top",
         '<br><br><button class="bar-btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
       document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
       emptyNote.hidden = false;
-      updateStatus(0, 0);
+      updateStatus(0, 0, 0);
       return;
     }
     emptyNote.textContent = "Keine Karten gefunden – Filter anpassen.";
     emptyNote.hidden = true;
     showProgress();
-    updateStatus(0, 0);
+    updateStatus(0, 0, 0);
     loadCollectionCards(col, token)
       .then(() => { if (token === loadToken) progress.hidden = true; })
       .catch(err => {
@@ -1631,8 +1636,9 @@ defineTemplate("mtg-to-top",
 
       const problems = unresolved.concat(errors);
       if (problems.length) {
-        colStatus.innerHTML = '<span class="ok">' + found.length +
-          ' Karten übernommen.</span>\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
+        colStatus.innerHTML = '<span class="ok">' + found.reduce((s, f) => s + f.qty, 0) +
+          ' Karten (' + found.length + ' verschiedene Drucke) übernommen.</span>' +
+          '\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
           problems.join("\n");
         createBtn.disabled = false;
       } else {
@@ -1786,8 +1792,8 @@ defineTemplate("mtg-to-top",
     return list;
   }
 
-  function updateStatus(visibleCount, totalValue) {
-    let text = visibleCount + " von " + cards.length + " Karten";
+  function updateStatus(visibleQty, totalQty, totalValue) {
+    let text = visibleQty + " von " + totalQty + " Karten";
     if (totalValue > 0 && !compareMode) text += " · Wert: " + formatEur(totalValue);
     text += " · " + favorites.size + " Favoriten";
     if (cmInfo) {
@@ -1803,20 +1809,25 @@ defineTemplate("mtg-to-top",
   function applyFilters() {
     let visible = 0;
     let value = 0;
+    let visibleQty = 0;
+    let totalQty = 0;
     for (const [i, card] of sortedCards().entries()) {
       const el = cardEls.get(card.id);
       if (!el) continue;
+      const qty = card.qty || 1;
+      totalQty += qty;
       const show = matchesFilters(card);
       el.setFiltered(!show);
       el.setOrder(i);
       if (show) {
         visible++;
-        if (card.price !== null) value += card.price * (card.qty || 1);
+        visibleQty += qty;
+        if (card.price !== null) value += card.price * qty;
       }
     }
     // Ohne Collection bleibt der Hinweis mit CTA sichtbar
     emptyNote.hidden = visible > 0 || (cards.length === 0 && !!currentCollection());
-    updateStatus(visible, value);
+    updateStatus(visibleQty, totalQty, value);
     updateFilterToggle();
   }
 
