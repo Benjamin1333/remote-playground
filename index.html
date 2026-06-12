@@ -15,6 +15,9 @@
     --accent-2: #2e8b57;
     --gold: #f2c14e;
     --border: #2e3a44;
+    /* Design-Tokens für Bedienelemente – neue Controls nutzen diese Werte */
+    --radius: 8px;
+    --btn-pad: 7px 12px;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -62,22 +65,35 @@
     display: flex;
     gap: 8px;
   }
-  .collection-actions > .bar-btn { flex: 1; }
+  .collection-actions > .btn { flex: 1; }
   .more-wrap { flex: 0 0 auto; }
-  .more-wrap > .bar-btn { width: 100%; min-width: 48px; height: 100%; }
-  .bar-btn {
+  .more-wrap > .btn { width: 100%; min-width: 48px; height: 100%; }
+  /* Basisklasse aller Schaltflächen. Zustände über Modifikatoren:
+     .primary (Hauptaktion), .active (gewählt, Akzentfarbe),
+     .gold.active (gewählt, Gold – z. B. Favoriten-Filter) */
+  .btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
+    border-radius: var(--radius);
+    padding: var(--btn-pad);
     font-size: 0.9rem;
     cursor: pointer;
   }
-  .bar-btn:hover { border-color: var(--accent); }
-  .bar-btn.primary { border-color: var(--accent-2); color: var(--accent); }
-  .bar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .bar-btn:disabled:hover { border-color: var(--border); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { border-color: var(--accent-2); color: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); }
+  .btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 8px rgba(76,201,100,0.3);
+  }
+  .btn.gold.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 8px rgba(242,193,78,0.35);
+  }
 
   .more-wrap { position: relative; }
   .more-menu {
@@ -139,7 +155,7 @@
     top: 8px;
     left: 8px;
     max-width: calc(100% - 16px);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 3px 8px;
     font-size: 0.78rem;
     font-weight: 700;
@@ -175,7 +191,7 @@
       font-size: 16px;
     }
     .color-btn { width: 42px; height: 42px; }
-    .bar-btn, .view-btn, .fav-filter-btn, .cmp-chip { min-height: 42px; }
+    .btn, .cmp-chip { min-height: 42px; }
     .grid { padding: 8px 12px 48px; gap: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -205,7 +221,7 @@
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 9px 12px;
     font-size: 0.92rem;
     cursor: pointer;
@@ -257,7 +273,7 @@
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 7px 10px;
     font-size: 0.9rem;
     font-family: inherit;
@@ -266,36 +282,6 @@
   input[type="search"] { width: 200px; }
   input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
-  .view-btn {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .view-btn:hover { border-color: var(--accent); }
-  .view-btn.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 8px rgba(76,201,100,0.3);
-  }
-
-  .fav-filter-btn {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .fav-filter-btn.active {
-    border-color: var(--gold);
-    color: var(--gold);
-    box-shadow: 0 0 8px rgba(242,193,78,0.35);
-  }
   .reset-btn {
     background: none;
     border: none;
@@ -435,7 +421,7 @@
     background: rgba(10,13,16,0.78);
     border: 1px solid var(--gold);
     color: var(--gold);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 3px 8px;
     font-size: 0.82rem;
     font-weight: 700;
@@ -447,7 +433,7 @@
     gap: 10px;
   }
   .grid.gallery .card {
-    border-radius: 8px;
+    border-radius: var(--radius);
     contain-intrinsic-size: 160px 310px;
   }
   .grid.gallery .card .info { padding: 7px 8px 9px; gap: 2px; }
@@ -489,7 +475,7 @@
     border: none;
     color: #fff;
     padding: 8px 18px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     cursor: pointer;
   }
 
@@ -589,11 +575,11 @@ defineTemplate("mtg-collection-bar", `
   <div class="collection-bar">
     <select id="collection-select" aria-label="Collection auswählen"></select>
     <div class="collection-actions">
-      <button class="bar-btn primary" id="col-new">+ Neu</button>
-      <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
-      <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
+      <button class="btn primary" id="col-new">+ Neu</button>
+      <button class="btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
+      <button class="btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
       <div class="more-wrap">
-        <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
+        <button class="btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
         <div class="more-menu" id="more-menu" hidden>
           <button id="col-rename">Umbenennen</button>
           <button id="col-live">Live-Link teilen</button>
@@ -629,9 +615,9 @@ defineTemplate("mtg-filter-controls", `
     </div>
     <div class="control-group">
       <span class="label">Ansicht</span>
-      <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
-      <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
-      <button class="view-btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
+      <button class="btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
+      <button class="btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
+      <button class="btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
     </div>
     <div class="control-group">
       <span class="label">Sortierung</span>
@@ -646,7 +632,7 @@ defineTemplate("mtg-filter-controls", `
       <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
     </div>
     <div class="control-group">
-      <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
+      <button class="btn gold" id="fav-filter">★ Nur Favoriten</button>
       <button class="reset-btn" id="reset">Filter zurücksetzen</button>
     </div>
     </div>
@@ -663,14 +649,14 @@ defineTemplate("mtg-compare-bar", `
       <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
       <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
     </div>
-    <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
+    <button class="btn" id="compare-exit">Vergleich beenden</button>
   </div>`);
 
 defineTemplate("mtg-share-bar", `
   <div class="compare-bar" id="share-bar" hidden>
     <span class="cmp-title" id="share-title"></span>
-    <button class="bar-btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
-    <button class="bar-btn" id="share-close">Schließen</button>
+    <button class="btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
+    <button class="btn" id="share-close">Schließen</button>
   </div>`);
 
 defineTemplate("mtg-progress-bar", `
@@ -708,8 +694,8 @@ Counterspell
       </div>
       <div class="status" id="col-status"></div>
       <div class="buttons">
-        <button class="bar-btn" id="col-cancel">Abbrechen</button>
-        <button class="bar-btn primary" id="col-create">Collection erstellen</button>
+        <button class="btn" id="col-cancel">Abbrechen</button>
+        <button class="btn primary" id="col-create">Collection erstellen</button>
       </div>
     </div>
   </div>`);
@@ -721,8 +707,8 @@ defineTemplate("mtg-compare-modal", `
       <p class="hint" id="compare-hint"></p>
       <select id="compare-select" aria-label="Collection zum Vergleich"></select>
       <div class="buttons">
-        <button class="bar-btn" id="compare-cancel">Abbrechen</button>
-        <button class="bar-btn primary" id="compare-start">Vergleichen</button>
+        <button class="btn" id="compare-cancel">Abbrechen</button>
+        <button class="btn primary" id="compare-start">Vergleichen</button>
       </div>
     </div>
   </div>`);
@@ -1384,7 +1370,7 @@ defineTemplate("mtg-to-top",
     if (!col) {
       progress.hidden = true;
       emptyNote.innerHTML = 'Noch keine Collection vorhanden. ' +
-        '<br><br><button class="bar-btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
+        '<br><br><button class="btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
       document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
       emptyNote.hidden = false;
       updateStatus(0, 0, 0);
