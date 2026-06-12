@@ -38,7 +38,8 @@
      dieselben Klassen/IDs mit wie zuvor, das Styling bleibt unverändert. */
   mtg-app-header, mtg-collection-bar, mtg-filter-controls, mtg-status-bar,
   mtg-compare-bar, mtg-share-bar, mtg-progress-bar, mtg-filter-bar,
-  mtg-filter-sheet, mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
+  mtg-filter-sheet, mtg-detail-panel, mtg-detail-sheet,
+  mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
 
   header {
     padding: 14px 16px 0;
@@ -211,7 +212,8 @@
   @media (min-width: 1024px) {
     .app-layout {
       display: grid;
-      grid-template-columns: 264px minmax(0, 1fr);
+      /* Sidebar | Inhalt | Detail-Panel (kollabiert, solange [hidden]) */
+      grid-template-columns: 264px minmax(0, 1fr) auto;
     }
     .filter-panel {
       display: block;
@@ -365,6 +367,71 @@
   @media (min-width: 1024px) {
     mtg-filter-chips { display: none; }
   }
+
+  /* Detail-on-Demand: Master-Detail-Panel (Desktop) bzw. Bottom-Sheet (mobil).
+     Der Inhalt #card-detail wandert per JS zwischen beiden Hosts. */
+  .detail-panel {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    width: 340px;
+    max-height: 100dvh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 16px 16px 24px;
+  }
+  .detail-panel .sheet-close { position: absolute; top: 6px; right: 6px; z-index: 1; }
+  @media (max-width: 1023.98px) {
+    .detail-panel { display: none !important; }
+  }
+  .card-detail .detail-img {
+    width: 100%;
+    aspect-ratio: 488 / 680;
+    object-fit: cover;
+    border-radius: 10px;
+    background: #0a0d10;
+  }
+  .detail-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .detail-head h3 { margin: 12px 0 0; font-size: 1.05rem; line-height: 1.3; }
+  .detail-head .fav-btn { font-size: 1.4rem; margin-top: 10px; }
+  .detail-meta { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+  .detail-meta .foil { color: var(--gold); }
+  .detail-type { margin-top: 10px; font-size: 0.87rem; font-weight: 600; }
+  .detail-oracle { margin-top: 8px; font-size: 0.85rem; line-height: 1.55; }
+  .detail-flavor {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .detail-prices {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .detail-prices .now { font-size: 1.05rem; font-weight: 700; color: var(--accent); }
+  .detail-prices .now.unknown { color: var(--muted); font-weight: 400; }
+  .detail-prices .now small { color: var(--muted); font-weight: 400; }
+  .detail-prices .lbl { color: var(--muted); }
+  .detail-links { margin-top: 14px; display: flex; gap: 8px; }
+  .detail-links .btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+  }
   .color-btn {
     width: 34px;
     height: 34px;
@@ -467,11 +534,21 @@
     contain-intrinsic-size: 230px 420px;
   }
   .card.filtered-out { display: none; }
+  .card { cursor: pointer; }
   .card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 22px rgba(0,0,0,0.5);
   }
-  .card a.img-link { display: block; line-height: 0; }
+  .card .img-link {
+    display: block;
+    line-height: 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .card .img-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .card img {
     width: 100%;
     aspect-ratio: 488 / 680;
@@ -531,7 +608,15 @@
     color: #aab4bd;
     flex-shrink: 0;
     transition: transform 0.1s, color 0.1s;
+    /* Mindest-Touchziel (WCAG 2.5.8), ohne die Zeile aufzublähen */
+    min-width: 30px;
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -5px -6px 0 0;
   }
+  .card .cm-link { display: inline-block; padding: 5px 0; }
   .fav-btn:hover { transform: scale(1.2); color: var(--gold); }
   .fav-btn.faved { color: var(--gold); }
 
@@ -679,10 +764,12 @@
     <div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
     <div class="grid" id="grid"></div>
   </main>
+  <mtg-detail-panel></mtg-detail-panel>
 </div>
 
 <mtg-filter-bar></mtg-filter-bar>
 <mtg-filter-sheet></mtg-filter-sheet>
+<mtg-detail-sheet></mtg-detail-sheet>
 <mtg-collection-modal></mtg-collection-modal>
 <mtg-compare-modal></mtg-compare-modal>
 <mtg-to-top></mtg-to-top>
@@ -810,6 +897,22 @@ defineTemplate("mtg-filter-sheet", `
     <div class="sheet-footer">
       <button class="btn primary" id="filter-sheet-apply">Zeige alle Karten</button>
     </div>
+  </dialog>`);
+
+defineTemplate("mtg-detail-panel", `
+  <aside class="detail-panel" id="detail-panel" hidden aria-label="Kartendetails">
+    <button class="sheet-close" id="detail-close" aria-label="Details schließen">✕</button>
+    <div class="card-detail" id="card-detail"></div>
+  </aside>`);
+
+defineTemplate("mtg-detail-sheet", `
+  <dialog class="sheet" id="detail-sheet" aria-label="Kartendetails">
+    <div class="sheet-header">
+      <div class="grabber" aria-hidden="true"></div>
+      <h2 id="detail-sheet-title">Kartendetails</h2>
+      <button class="sheet-close" id="detail-sheet-close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="sheet-body" id="detail-sheet-body"></div>
   </dialog>`);
 
 defineTemplate("mtg-status-bar", `<div class="status-bar" id="status"></div>`);
@@ -1530,6 +1633,7 @@ defineTemplate("mtg-to-top",
   function switchCollection(id) {
     exitCompareUi();
     exitShareUi();
+    closeCardDetail(); // Detail einer anderen Collection wäre veraltet
     activeId = id;
     if (id) localStorage.setItem(ACTIVE_KEY, id);
     else localStorage.removeItem(ACTIVE_KEY);
@@ -1899,6 +2003,46 @@ defineTemplate("mtg-to-top",
     return html;
   }
 
+  // ===== Detail-Ansicht (Panel auf Desktop, Bottom-Sheet mobil) =====
+  function renderCardDetail(card) {
+    const d = document.getElementById("card-detail");
+    const faved = favorites.has(uidOf(card));
+    const eur = card.priceEur !== undefined ? card.priceEur : (card.foilOnly ? null : card.price);
+    const foilP = card.priceFoil !== undefined ? card.priceFoil : (card.foilOnly ? card.price : null);
+    const priceRow = (label, v) => (v !== null && v !== undefined)
+      ? '<div><span class="lbl">' + label + ':</span> ' + formatEur(v) + "</div>" : "";
+    d.innerHTML =
+      '<img class="detail-img" src="' + card.image + '" alt="' + escapeHtml(card.name) + '">' +
+      '<div class="detail-head"><h3>' + escapeHtml(card.name) + "</h3>" +
+        '<button class="fav-btn' + (faved ? " faved" : "") + '" aria-pressed="' + faved +
+          '" aria-label="Als Favorit markieren">' + (faved ? "★" : "☆") + "</button></div>" +
+      '<div class="detail-meta">' + card.set.toUpperCase() + " #" + card.number +
+        ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+        (RARITY_NAME[card.rarity] || card.rarity) + "</span>" +
+        (card.foil ? ' · <span class="foil">Foil</span>' : "") +
+        ((card.qty || 1) > 1 ? " · " + card.qty + "× im Besitz" : "") + "</div>" +
+      (card.typeLine ? '<div class="detail-type">' + escapeHtml(card.typeLine) + "</div>" : "") +
+      (card.oracle ? '<div class="detail-oracle">' + escapeHtml(card.oracle).replace(/\n/g, "<br>") + "</div>" : "") +
+      (card.flavor ? '<div class="detail-flavor">' + escapeHtml(card.flavor).replace(/\n/g, "<br>") + "</div>" : "") +
+      '<div class="detail-prices">' +
+        (card.price !== null
+          ? '<div class="now">' + (card.isCm ? "ab " : "") + formatEur(card.price) +
+            (card.priceIsFoil ? " <small>(Foil)</small>" : "") + "</div>"
+          : '<div class="now unknown">kein Preis verfügbar</div>') +
+        priceRow("Normal", eur) + priceRow("Foil", foilP) + priceRow("Trend", card.trend) +
+      "</div>" +
+      '<div class="detail-links">' +
+        '<a class="btn" href="' + card.url + '" target="_blank" rel="noopener">Scryfall ↗</a>' +
+        (card.cmUrl ? '<a class="btn" href="' + card.cmUrl + '" target="_blank" rel="noopener">Cardmarket ↗</a>' : "") +
+      "</div>";
+    document.getElementById("detail-sheet-title").textContent = card.name;
+    d.querySelector(".fav-btn").addEventListener("click", () => {
+      const el = cardEls.get(uidOf(card));
+      if (el) el.toggleFav(); // hält Kachel + Favoriten-Set synchron
+      renderCardDetail(card);
+    });
+  }
+
   // ---- Komponente: eine einzelne Kartenkachel ----
   // Das Element ist selbst die Grid-Kachel (Klasse "card"), kapselt sein
   // Rendering und die Favoriten-Interaktion und bietet kleine Methoden,
@@ -1917,14 +2061,23 @@ defineTemplate("mtg-to-top",
       if (!card) return;
       const faved = favorites.has(uidOf(card));
       this.classList.add("card");
+      // Klick irgendwo auf der Kachel (außer Stern/Links) öffnet die Details;
+      // fürs Keyboard ist der Bildbereich ein echter <button> (nichts
+      // Interaktives darf darin verschachtelt sein).
+      if (!this._wired) {
+        this._wired = true;
+        this.addEventListener("click", e => {
+          if (e.target.closest(".fav-btn, .cm-link, a")) return;
+          this.dispatchEvent(new CustomEvent("card-open", { bubbles: true, detail: this._card }));
+        });
+      }
       this.innerHTML =
-        '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
-          card.name.replace(/"/g, "&quot;") + '">' +
+        '<button class="img-link" aria-label="Details zu ' + card.name.replace(/"/g, "&quot;") + '">' +
           '<img loading="lazy" decoding="async"' +
           ' src="' + card.image + '"' +
           (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
           ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
-        "</a>" +
+        "</button>" +
         (card.compare
           ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
           : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
@@ -2223,6 +2376,36 @@ defineTemplate("mtg-to-top",
   // Tipp auf den Scrim schließt das Sheet (Klickziel ist dann der <dialog> selbst)
   filterSheet.addEventListener("click", e => { if (e.target === filterSheet) filterSheet.close(); });
 
+  // Detail-Ansicht: gleiche Wander-Logik wie die Filter-Gruppen
+  const detailPanel = document.getElementById("detail-panel");
+  const detailSheet = document.getElementById("detail-sheet");
+  const detailSheetBody = document.getElementById("detail-sheet-body");
+  const cardDetailEl = document.getElementById("card-detail");
+  function placeCardDetail() {
+    if (desktopLayout.matches) {
+      if (detailSheet.open) detailSheet.close();
+      if (cardDetailEl.parentElement !== detailPanel) detailPanel.appendChild(cardDetailEl);
+    } else {
+      detailPanel.hidden = true;
+      if (cardDetailEl.parentElement !== detailSheetBody) detailSheetBody.appendChild(cardDetailEl);
+    }
+  }
+  function openCardDetail(card) {
+    renderCardDetail(card);
+    if (desktopLayout.matches) detailPanel.hidden = false;
+    else if (!detailSheet.open) detailSheet.showModal();
+  }
+  function closeCardDetail() {
+    detailPanel.hidden = true;
+    if (detailSheet.open) detailSheet.close();
+  }
+  desktopLayout.addEventListener("change", placeCardDetail);
+  placeCardDetail();
+  grid.addEventListener("card-open", e => openCardDetail(e.detail));
+  document.getElementById("detail-close").addEventListener("click", closeCardDetail);
+  document.getElementById("detail-sheet-close").addEventListener("click", () => detailSheet.close());
+  detailSheet.addEventListener("click", e => { if (e.target === detailSheet) detailSheet.close(); });
+
   document.querySelectorAll(".color-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const c = btn.dataset.color;
@@ -2361,6 +2544,7 @@ defineTemplate("mtg-to-top",
     if (e.key !== "Escape") return;
     if (!modalOverlay.hidden) closeModal();
     if (!compareOverlay.hidden) compareOverlay.hidden = true;
+    if (!detailPanel.hidden) closeCardDetail();
     closeMoreMenu();
   });
 

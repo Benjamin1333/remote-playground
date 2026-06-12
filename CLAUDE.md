@@ -52,6 +52,17 @@ Entscheidung, keine Nachlässigkeit (siehe Technologie-Entscheidungen).
 - **Breakpoints:** 1024px (Sidebar ↔ Sheet), 600px (Grid 2-spaltig kompakt).
   Touch-Ziele < 1024px: min. 44px (Apple HIG/WCAG 2.5.5). Safe-Area-Insets
   (`env(safe-area-inset-bottom)`) an fixer Leiste, Sheet-Footer und To-Top.
+- **Detail-on-Demand (Phase 2):** Klick/Tap auf eine Kachel öffnet die
+  Detail-Ansicht (`renderCardDetail()` in `#card-detail`): großes Bild,
+  Typ-/Oracle-/Flavor-Text, Preisaufschlüsselung Normal/Foil/Trend,
+  Scryfall-/Cardmarket-Links. Desktop: Master-Detail-Panel als dritte
+  Grid-Spalte (`<mtg-detail-panel>`, sticky); mobil: eigenes Bottom-Sheet
+  (`<mtg-detail-sheet>`). Der Inhalt wandert wie die Filter-Gruppen per
+  `matchMedia` zwischen beiden Hosts.
+- **A11y-Muster `<mtg-card>`:** Der Bildbereich ist ein echter `<button>`
+  (öffnet Details, Tastatur inklusive); Favoriten-Stern und Cardmarket-Link
+  liegen **außerhalb** davon – niemals Interaktives in den Bild-Button
+  verschachteln (axe `nested-interactive`). Stern/Link haben ≥30px-Targets.
 - **Bewusster Trade-off:** Pinch-/Doppeltipp-Zoom ist absichtlich deaktiviert
   (App-Gefühl); axe meldet das als `meta-viewport`. Nicht „fixen“, ohne die
   Produktentscheidung zu revidieren.
