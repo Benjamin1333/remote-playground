@@ -387,6 +387,7 @@
     font-size: 0.75rem;
     color: var(--muted);
   }
+  .card .meta .foil { color: var(--gold); }
   .card .price-line {
     margin-top: auto;
     display: flex;
@@ -630,6 +631,7 @@ defineTemplate("mtg-filter-controls", `
       <span class="label">Ansicht</span>
       <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
       <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
+      <button class="view-btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
     </div>
     <div class="control-group">
       <span class="label">Sortierung</span>
@@ -735,9 +737,10 @@ defineTemplate("mtg-to-top",
 
   const FAV_KEY = "tmt-favorites-v1";
   const COLLECTIONS_KEY = "mtg-collections-v1";
-  const CARD_CACHE_KEY = "mtg-card-cache-v2"; // v2: inkl. Typ-/Regel-/Flavor-Text für die Suche
+  const CARD_CACHE_KEY = "mtg-card-cache-v3"; // v3: getrennte Normal-/Foil-Preise
   const ACTIVE_KEY = "mtg-active-collection-v1";
   const VIEW_KEY = "mtg-view-v1";
+  const GROUP_KEY = "mtg-group-v1";
   const FILTERS_OPEN_KEY = "mtg-filters-open-v1";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
@@ -745,13 +748,14 @@ defineTemplate("mtg-to-top",
 
   // ===== Zustand =====
   let cards = [];
-  const cardEls = new Map(); // card.id -> <mtg-card>-Element (pro Collection-Ansicht)
+  const cardEls = new Map(); // uid (Druck + Foil-Variante) -> <mtg-card>-Element
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
   const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false, compareFilter: "all" };
 
   let collections = loadJson(COLLECTIONS_KEY, []);
   let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
   localStorage.removeItem("mtg-card-cache-v1"); // alter Cache ohne Textfelder
+  localStorage.removeItem("mtg-card-cache-v2"); // alter Cache ohne getrennte Foil-Preise
   let activeId = localStorage.getItem(ACTIVE_KEY);
   if (!collections.some(c => c.id === activeId)) {
     activeId = collections.length ? collections[0].id : null;
@@ -791,11 +795,40 @@ defineTemplate("mtg-to-top",
     return s.toLowerCase().replace(/’/g, "'").trim();
   }
 
+  function numOrNull(v) {
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
   function cheapestPrice(prices) {
     const vals = [prices.eur, prices.eur_foil]
       .map(parseFloat)
       .filter(v => !isNaN(v));
     return vals.length ? Math.min(...vals) : null;
+  }
+
+  // Eindeutiger Schlüssel eines Exemplars in der Ansicht: Druck + Foil-Variante.
+  // Nicht-Foil nutzt die nackte Scryfall-ID, damit alte Favoriten gültig bleiben.
+  function uidOf(card) {
+    return card.id + (card.foil ? ":f" : "");
+  }
+
+  // Wirksamen Preis je Exemplar bestimmen: Foil-Exemplare nutzen den Foil-Preis,
+  // normale den Normalpreis – mit Fallback auf den jeweils anderen (z. B. bei
+  // Foil-only-Drucken). Alte Exporte ohne getrennte Preise nutzen card.price.
+  function finalizePrice(card) {
+    const eur = card.priceEur !== undefined ? card.priceEur : (card.foilOnly ? null : card.price);
+    const foil = card.priceFoil !== undefined ? card.priceFoil : (card.foilOnly ? card.price : null);
+    if (card.foil) {
+      card.price = foil !== null && foil !== undefined ? foil : (eur ?? null);
+      card.priceIsFoil = true;
+    } else if (eur !== null && eur !== undefined) {
+      card.price = eur;
+      card.priceIsFoil = false;
+    } else {
+      card.price = foil ?? null;
+      card.priceIsFoil = card.price !== null;
+    }
   }
 
   function simplify(card) {
@@ -818,6 +851,8 @@ defineTemplate("mtg-to-top",
       url: card.scryfall_uri,
       cmId: card.cardmarket_id || null,
       cmUrl: (card.purchase_uris && card.purchase_uris.cardmarket) || "",
+      priceEur: numOrNull((card.prices || {}).eur),
+      priceFoil: numOrNull((card.prices || {}).eur_foil),
       price: cheapestPrice(card.prices || {}),
       foilOnly: !(card.prices && card.prices.eur) && !!(card.prices && card.prices.eur_foil),
       trend: null
@@ -861,17 +896,13 @@ defineTemplate("mtg-to-top",
   function applyCardmarketPrice(card, prices) {
     const p = card.cmId !== null ? prices[String(card.cmId)] : null;
     if (!p) return;
-    const lows = [
-      { v: p.low, foil: false },
-      { v: p.lowFoil, foil: true }
-    ].filter(x => typeof x.v === "number");
-    if (!lows.length) return;
-    const best = lows.reduce((a, b) => (b.v < a.v ? b : a));
-    card.price = best.v;
-    card.foilOnly = best.foil;
+    if (typeof p.low !== "number" && typeof p.lowFoil !== "number") return;
+    if (typeof p.low === "number") card.priceEur = p.low;
+    if (typeof p.lowFoil === "number") card.priceFoil = p.lowFoil;
     card.trend = typeof p.trend === "number" ? p.trend : null;
     card.isCm = true;
-    const el = cardEls.get(card.id);
+    finalizePrice(card);
+    const el = cardEls.get(uidOf(card));
     if (el) el.refreshPrice();
   }
 
@@ -889,33 +920,41 @@ defineTemplate("mtg-to-top",
 
   async function loadCollectionCards(col, token) {
     const have = [];
-    const missing = [];
+    const missingByCard = new Map(); // scryfallId -> [Einträge] (Foil + Normal je Druck)
     for (const entry of col.entries) {
       const cached = cardCache[entry.id];
-      if (cached) have.push({ ...cached, qty: entry.qty });
-      else missing.push(entry);
+      if (cached) have.push({ ...cached, qty: entry.qty, foil: !!entry.foil });
+      else {
+        if (!missingByCard.has(entry.id)) missingByCard.set(entry.id, []);
+        missingByCard.get(entry.id).push(entry);
+      }
     }
     setProgress(have.length, col.entries.length);
     if (have.length) addBatch(have, token);
-    for (let i = 0; i < missing.length; i += 75) {
-      const slice = missing.slice(i, i + 75);
+    const missingIds = [...missingByCard.keys()];
+    let loaded = have.length;
+    for (let i = 0; i < missingIds.length; i += 75) {
+      const slice = missingIds.slice(i, i + 75);
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+        body: JSON.stringify({ identifiers: slice.map(id => ({ id: id })) })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
       if (token !== loadToken) return;
-      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
-      const batch = json.data.map(c => {
+      const batch = [];
+      for (const c of json.data) {
         const s = simplify(c);
         cardCache[c.id] = s;
-        return { ...s, qty: qtyById.get(c.id) || 1 };
-      });
+        for (const entry of missingByCard.get(c.id) || []) {
+          batch.push({ ...s, qty: entry.qty, foil: !!entry.foil });
+          loaded++;
+        }
+      }
       saveCardCache();
       addBatch(batch, token);
-      setProgress(Math.min(have.length + i + 75, col.entries.length), col.entries.length);
+      setProgress(Math.min(loaded, col.entries.length), col.entries.length);
     }
   }
 
@@ -923,29 +962,34 @@ defineTemplate("mtg-to-top",
   // und gibt sie gesammelt zurück – für den Vergleich zweier Collections.
   async function getCollectionCards(col) {
     const out = [];
-    const missing = [];
+    const missingByCard = new Map(); // scryfallId -> [Einträge]
     for (const entry of col.entries) {
       const cached = cardCache[entry.id];
-      if (cached) out.push({ ...cached, qty: entry.qty });
-      else missing.push(entry);
+      if (cached) out.push({ ...cached, qty: entry.qty, foil: !!entry.foil });
+      else {
+        if (!missingByCard.has(entry.id)) missingByCard.set(entry.id, []);
+        missingByCard.get(entry.id).push(entry);
+      }
     }
-    for (let i = 0; i < missing.length; i += 75) {
-      const slice = missing.slice(i, i + 75);
+    const missingIds = [...missingByCard.keys()];
+    for (let i = 0; i < missingIds.length; i += 75) {
+      const slice = missingIds.slice(i, i + 75);
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+        body: JSON.stringify({ identifiers: slice.map(id => ({ id: id })) })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
-      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
       for (const c of json.data) {
         const s = simplify(c);
         cardCache[c.id] = s;
-        out.push({ ...s, qty: qtyById.get(c.id) || 1 });
+        for (const entry of missingByCard.get(c.id) || []) {
+          out.push({ ...s, qty: entry.qty, foil: !!entry.foil });
+        }
       }
     }
-    if (missing.length) saveCardCache();
+    if (missingIds.length) saveCardCache();
     return out;
   }
 
@@ -1000,19 +1044,24 @@ defineTemplate("mtg-to-top",
 
   function adoptSharedCollection() {
     if (!sharedView) return;
-    const entryById = new Map();
+    const entryByKey = new Map();
     for (const f of sharedView.found) {
       cardCache[f.card.id] = f.card;
-      const existing = entryById.get(f.card.id);
+      const k = f.card.id + (f.foil ? ":f" : "");
+      const existing = entryByKey.get(k);
       if (existing) existing.qty += f.qty;
-      else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+      else {
+        const entry = { id: f.card.id, qty: f.qty };
+        if (f.foil) entry.foil = true;
+        entryByKey.set(k, entry);
+      }
     }
     saveCardCache();
     const col = {
       id: "c" + Date.now().toString(36),
       name: sharedView.name,
       createdAt: new Date().toISOString(),
-      entries: [...entryById.values()]
+      entries: [...entryByKey.values()]
     };
     collections.push(col);
     saveCollections();
@@ -1069,10 +1118,10 @@ defineTemplate("mtg-to-top",
     if (!liveStore || !liveStore.shares[col.id]) return;
     const colCards = await getCollectionCards(col);
     const payload = {
-      v: 1,
+      v: 2, // v2: viertes Element = Foil-Flag
       name: col.name,
       updatedAt: new Date().toISOString(),
-      cards: colCards.map(c => [c.set, c.number, c.qty || 1])
+      cards: colCards.map(c => [c.set, c.number, c.qty || 1, c.foil ? 1 : 0])
     };
     const res = await fetch(KVDB_URL + "/" + liveStore.bucket + "/" + liveStore.shares[col.id], {
       method: "PUT",
@@ -1157,7 +1206,8 @@ defineTemplate("mtg-to-top",
       const entries = (payload.cards || []).map(c => ({
         qty: parseInt(c[2], 10) || 1,
         ident: { set: String(c[0]), collector_number: String(c[1]) },
-        raw: c[0] + " " + c[1]
+        raw: c[0] + " " + c[1],
+        foil: !!(c[3] && parseInt(c[3], 10))
       }));
       if (!entries.length) throw new Error("Die geteilte Collection ist leer");
       const { found } = await resolveEntries(entries, t => { progressText.textContent = t; });
@@ -1169,7 +1219,7 @@ defineTemplate("mtg-to-top",
         "Live geteilt: „" + sharedView.name + "“ (" + found.length + " Karten" +
         (stand ? " · Stand " + stand : "") + ")";
       shareBar.hidden = false;
-      addBatch(found.map(f => ({ ...f.card, qty: f.qty })), token);
+      addBatch(found.map(f => ({ ...f.card, qty: f.qty, foil: !!f.foil })), token);
       progress.hidden = true;
       return true;
     } catch (e) {
@@ -1236,6 +1286,7 @@ defineTemplate("mtg-to-top",
       }
       const list = [...byName.values()].map(e => ({
         ...e.card,
+        foil: false, // im Vergleich zählen alle Varianten eines Namens zusammen
         qty: e.qtyA + e.qtyB,
         compare: {
           a: e.qtyA,
@@ -1408,8 +1459,10 @@ defineTemplate("mtg-to-top",
         const entries = [];
         for (const item of data.cards) {
           if (!item.card || !item.card.id) continue;
-          cardCache[item.card.id] = item.card;
-          entries.push({ id: item.card.id, qty: item.qty || 1 });
+          cardCache[item.card.id] = { ...item.card, qty: undefined, foil: undefined };
+          const entry = { id: item.card.id, qty: item.qty || 1 };
+          if (item.card.foil) entry.foil = true;
+          entries.push(entry);
         }
         if (!entries.length) throw new Error("Die Datei enthält keine Karten");
         saveCardCache();
@@ -1437,13 +1490,18 @@ defineTemplate("mtg-to-top",
       .trim();
   }
 
+  // Foil-Markierung am Ende: *F* (F) [F]
+  function hasFoilMarker(s) {
+    return /[*([]F[*)\]]\s*$/i.test(s.trim());
+  }
+
   function parseList(text, setHint) {
-    const merged = new Map(); // key -> {qty, ident, raw}
+    const merged = new Map(); // key -> {qty, ident, raw, foil}
     const errors = [];
-    function add(key, qty, ident, raw) {
+    function add(key, qty, ident, raw, foil) {
       const existing = merged.get(key);
       if (existing) existing.qty += qty;
-      else merged.set(key, { qty, ident, raw });
+      else merged.set(key, { qty, ident, raw, foil: !!foil });
     }
     for (const rawLine of text.split("\n")) {
       let line = rawLine.trim();
@@ -1451,23 +1509,29 @@ defineTemplate("mtg-to-top",
       line = line.replace(/^[-*]\s*\[[ xX]\]\s*/, "").replace(/^[-*]\s+/, "").trim();
       if (!line) continue;
       let m;
-      // Arena/Moxfield: "1 Name (SET) 123" (Sammlernummer optional)
-      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([A-Za-z0-9★†-]+)\s*.*$/))) {
+      // Arena/Moxfield: "1 Name (SET) 123" (Sammlernummer optional, "*F*" = Foil)
+      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([A-Za-z0-9★†-]+)\s*(.*)$/))) {
         const set = m[3].toLowerCase();
-        add("n:" + set + ":" + m[4], parseInt(m[1], 10), { set: set, collector_number: m[4] }, rawLine);
+        const foil = hasFoilMarker(m[5]);
+        add("n:" + set + ":" + m[4] + (foil ? ":f" : ""), parseInt(m[1], 10),
+          { set: set, collector_number: m[4] }, rawLine, foil);
         continue;
       }
       if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s*$/))) {
         const set = m[3].toLowerCase();
+        const foil = hasFoilMarker(m[2]);
         const name = cleanName(m[2]);
-        add("m:" + normName(name) + "|" + set, parseInt(m[1], 10), { name: name, set: set }, rawLine);
+        add("m:" + normName(name) + "|" + set + (foil ? ":f" : ""), parseInt(m[1], 10),
+          { name: name, set: set }, rawLine, foil);
         continue;
       }
       // Set-Liste mit Sammlernummer: "0017 Name ..." (Set-Code nötig)
       if ((m = line.match(/^(\d{1,4})\s+(.+)$/)) && (m[1].length >= 3 || m[1][0] === "0")) {
         if (setHint) {
           const num = String(parseInt(m[1], 10));
-          add("n:" + setHint + ":" + num, 1, { set: setHint, collector_number: num }, rawLine);
+          const foil = hasFoilMarker(m[2]);
+          add("n:" + setHint + ":" + num + (foil ? ":f" : ""), 1,
+            { set: setHint, collector_number: num }, rawLine, foil);
         } else {
           errors.push(rawLine + "   → Sammlernummer erkannt, aber kein Set-Code angegeben");
         }
@@ -1475,13 +1539,15 @@ defineTemplate("mtg-to-top",
       }
       // "4x Name" / "4 Name"
       if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+)$/))) {
+        const foil = hasFoilMarker(m[2]);
         const name = cleanName(m[2]);
-        add("m:" + normName(name), parseInt(m[1], 10), { name: name }, rawLine);
+        add("m:" + normName(name) + (foil ? ":f" : ""), parseInt(m[1], 10), { name: name }, rawLine, foil);
         continue;
       }
       // Nur der Kartenname
+      const foil = hasFoilMarker(line);
       const name = cleanName(line);
-      if (name) add("m:" + normName(name), 1, { name: name }, rawLine);
+      if (name) add("m:" + normName(name) + (foil ? ":f" : ""), 1, { name: name }, rawLine, foil);
     }
     return { entries: [...merged.values()], errors };
   }
@@ -1495,44 +1561,41 @@ defineTemplate("mtg-to-top",
     for (let i = 0; i < entries.length; i += 75) {
       const batch = entries.slice(i, i + 75);
       onStatus("Löse Karten auf … " + Math.min(i + 75, entries.length) + " / " + entries.length);
+      // Foil- und Normal-Exemplare desselben Drucks teilen sich einen Identifier
+      const identSeen = new Set();
+      const idents = [];
+      for (const e of batch) {
+        const k = JSON.stringify(e.ident);
+        if (!identSeen.has(k)) { identSeen.add(k); idents.push(e.ident); }
+      }
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: batch.map(e => e.ident) })
+        body: JSON.stringify({ identifiers: idents })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
 
+      // Gefundene Karten indexieren, dann jeden Eintrag seiner Karte zuordnen
       const bySetNum = new Map();
       const byName = new Map();
+      for (const card of json.data) {
+        bySetNum.set(card.set + ":" + card.collector_number.toLowerCase(), card);
+        for (const n of [normName(card.name), normName(card.name.split(" // ")[0])]) {
+          byName.set(n + "|" + card.set, card);
+          if (!byName.has(n)) byName.set(n, card);
+        }
+      }
       for (const e of batch) {
+        let card = null;
         if (e.ident.collector_number) {
-          bySetNum.set(e.ident.set + ":" + e.ident.collector_number.toLowerCase(), e);
+          card = bySetNum.get(e.ident.set + ":" + e.ident.collector_number.toLowerCase());
         } else {
           const n = normName(e.ident.name);
-          if (e.ident.set) byName.set(n + "|" + e.ident.set, e);
-          byName.set(n, e);
+          card = (e.ident.set && byName.get(n + "|" + e.ident.set)) || byName.get(n);
         }
-      }
-      const matched = new Set();
-      for (const card of json.data) {
-        let e = bySetNum.get(card.set + ":" + card.collector_number.toLowerCase());
-        if (!e || matched.has(e)) {
-          e = null;
-          const names = [normName(card.name), normName(card.name.split(" // ")[0])];
-          for (const n of names) {
-            const cand = byName.get(n + "|" + card.set) || byName.get(n);
-            if (cand && !matched.has(cand)) { e = cand; break; }
-          }
-        }
-        if (e && !matched.has(e)) {
-          matched.add(e);
-          found.push({ card: simplify(card), qty: e.qty });
-        }
-      }
-      for (const e of batch) {
-        if (matched.has(e)) continue;
-        if (e.ident.name) fuzzyQueue.push(e);
+        if (card) found.push({ card: simplify(card), qty: e.qty, foil: !!e.foil });
+        else if (e.ident.name) fuzzyQueue.push(e);
         else unresolved.push(e.raw);
       }
     }
@@ -1541,7 +1604,7 @@ defineTemplate("mtg-to-top",
       onStatus("Unscharfe Suche: " + e.ident.name + " …");
       try {
         const res = await fetch(FUZZY_API + encodeURIComponent(e.ident.name));
-        if (res.ok) found.push({ card: simplify(await res.json()), qty: e.qty });
+        if (res.ok) found.push({ card: simplify(await res.json()), qty: e.qty, foil: !!e.foil });
         else unresolved.push(e.raw);
       } catch (err) { unresolved.push(e.raw); }
       await new Promise(r => setTimeout(r, 120)); // API schonen
@@ -1598,15 +1661,17 @@ defineTemplate("mtg-to-top",
       let col;
       if (isAdd) {
         col = currentCollection();
-        const byId = new Map(col.entries.map(e => [e.id, e]));
+        const byKey = new Map(col.entries.map(e => [uidOf(e), e]));
         for (const f of found) {
           cardCache[f.card.id] = f.card;
-          const existing = byId.get(f.card.id);
+          const k = f.card.id + (f.foil ? ":f" : "");
+          const existing = byKey.get(k);
           if (existing) existing.qty += f.qty;
           else {
             const entry = { id: f.card.id, qty: f.qty };
+            if (f.foil) entry.foil = true;
             col.entries.push(entry);
-            byId.set(f.card.id, entry);
+            byKey.set(k, entry);
           }
         }
         saveCardCache();
@@ -1614,20 +1679,25 @@ defineTemplate("mtg-to-top",
         switchCollection(col.id); // Ansicht mit neuen Karten neu aufbauen
         syncLiveShare(col);
       } else {
-        // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
-        const entryById = new Map();
+        // Duplikate (gleiches Exemplar über mehrere Zeilen) zusammenführen
+        const entryByKey = new Map();
         for (const f of found) {
           cardCache[f.card.id] = f.card;
-          const existing = entryById.get(f.card.id);
+          const k = f.card.id + (f.foil ? ":f" : "");
+          const existing = entryByKey.get(k);
           if (existing) existing.qty += f.qty;
-          else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+          else {
+            const entry = { id: f.card.id, qty: f.qty };
+            if (f.foil) entry.foil = true;
+            entryByKey.set(k, entry);
+          }
         }
         saveCardCache();
         col = {
           id: "c" + Date.now().toString(36),
           name: name,
           createdAt: new Date().toISOString(),
-          entries: [...entryById.values()]
+          entries: [...entryByKey.values()]
         };
         collections.push(col);
         saveCollections();
@@ -1657,7 +1727,7 @@ defineTemplate("mtg-to-top",
       html = '<span class="price unknown">kein Preis verfügbar</span>';
     } else {
       const prefix = card.isCm ? "ab " : "";
-      const foil = card.foilOnly ? " <small>(Foil)</small>" : "";
+      const foil = card.priceIsFoil ? " <small>(Foil)</small>" : "";
       const trend = card.trend !== null
         ? " <small>· Trend " + formatEur(card.trend) + "</small>"
         : "";
@@ -1686,6 +1756,7 @@ defineTemplate("mtg-to-top",
     render() {
       const card = this._card;
       if (!card) return;
+      const faved = favorites.has(uidOf(card));
       this.classList.add("card");
       this.innerHTML =
         '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
@@ -1701,15 +1772,16 @@ defineTemplate("mtg-to-top",
         '<div class="info">' +
           '<div class="name-row">' +
             '<div class="name">' + card.name + "</div>" +
-            '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") +
+            '<button class="fav-btn' + (faved ? " faved" : "") +
               '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
-              favorites.has(card.id) + '">' +
-              (favorites.has(card.id) ? "★" : "☆") +
+              faved + '">' +
+              (faved ? "★" : "☆") +
             "</button>" +
           "</div>" +
           '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
             ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
-            (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
+            (RARITY_NAME[card.rarity] || card.rarity) + "</span>" +
+            (card.foil ? ' · <span class="foil">Foil</span>' : "") + "</div>" +
           '<div class="price-line">' + priceHtml(card) + "</div>" +
         "</div>";
       this.querySelector(".fav-btn").addEventListener("click", () => this.toggleFav());
@@ -1717,15 +1789,15 @@ defineTemplate("mtg-to-top",
     }
 
     toggleFav() {
-      const card = this._card;
+      const uid = uidOf(this._card);
       const btn = this.querySelector(".fav-btn");
-      if (favorites.has(card.id)) {
-        favorites.delete(card.id);
+      if (favorites.has(uid)) {
+        favorites.delete(uid);
         btn.classList.remove("faved");
         btn.textContent = "☆";
         btn.setAttribute("aria-pressed", "false");
       } else {
-        favorites.add(card.id);
+        favorites.add(uid);
         btn.classList.add("faved");
         btn.textContent = "★";
         btn.setAttribute("aria-pressed", "true");
@@ -1737,6 +1809,22 @@ defineTemplate("mtg-to-top",
     refreshPrice() {
       const line = this.querySelector(".price-line");
       if (line) line.innerHTML = priceHtml(this._card);
+    }
+
+    // Mengen-Badge überschreiben (Gruppierung) bzw. mit null zurücksetzen
+    updateQtyBadge(text) {
+      const card = this._card;
+      if (!card || card.compare) return;
+      const def = (card.qty || 1) > 1 ? card.qty + "×" : "";
+      const t = text != null ? text : def;
+      let badge = this.querySelector(".qty-badge");
+      if (!t) { if (badge) badge.remove(); return; }
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "qty-badge";
+        this.querySelector(".img-link").after(badge);
+      }
+      badge.textContent = t;
     }
 
     setFiltered(hidden) { this.classList.toggle("filtered-out", hidden); }
@@ -1766,7 +1854,7 @@ defineTemplate("mtg-to-top",
     if (compareMode && filters.compareFilter !== "all" &&
         card.compare && card.compare.state !== filters.compareFilter) return false;
     if (!matchesColorFilter(card)) return false;
-    if (filters.favsOnly && !favorites.has(card.id)) return false;
+    if (filters.favsOnly && !favorites.has(uidOf(card))) return false;
     if (filters.search && !searchTextOf(card).includes(filters.search)) return false;
     if (filters.priceMin !== null && (card.price === null || card.price < filters.priceMin)) return false;
     if (filters.priceMax !== null && (card.price === null || card.price > filters.priceMax)) return false;
@@ -1807,26 +1895,44 @@ defineTemplate("mtg-to-top",
   // Sichtbarkeit & Reihenfolge per CSS steuern statt das DOM neu zu bauen –
   // so werden die <img>-Elemente nie neu erzeugt.
   function applyFilters() {
-    let visible = 0;
+    // Im Vergleichsmodus sind die Drucke bereits über den Namen gebündelt
+    const grouping = groupPrints && !compareMode;
+    let visibleTiles = 0;
     let value = 0;
     let visibleQty = 0;
     let totalQty = 0;
+    const groups = new Map(); // normName -> { el: Repräsentant, qty, prints }
     for (const [i, card] of sortedCards().entries()) {
-      const el = cardEls.get(card.id);
+      const el = cardEls.get(uidOf(card));
       if (!el) continue;
       const qty = card.qty || 1;
       totalQty += qty;
-      const show = matchesFilters(card);
-      el.setFiltered(!show);
-      el.setOrder(i);
-      if (show) {
-        visible++;
+      const pass = matchesFilters(card);
+      let show = pass;
+      if (pass) {
         visibleQty += qty;
         if (card.price !== null) value += card.price * qty;
+        if (grouping) {
+          const key = normName(card.name);
+          const g = groups.get(key);
+          // Erster passender Druck (in Sortierreihenfolge) vertritt die Gruppe
+          if (g) { g.qty += qty; g.prints++; show = false; }
+          else groups.set(key, { el: el, qty: qty, prints: 1 });
+        }
       }
+      el.setFiltered(!show);
+      el.setOrder(i);
+      if (show) visibleTiles++;
+    }
+    if (grouping) {
+      for (const g of groups.values()) {
+        g.el.updateQtyBadge(g.prints > 1 ? g.qty + "× · " + g.prints + " Prints" : null);
+      }
+    } else {
+      for (const el of cardEls.values()) el.updateQtyBadge(null);
     }
     // Ohne Collection bleibt der Hinweis mit CTA sichtbar
-    emptyNote.hidden = visible > 0 || (cards.length === 0 && !!currentCollection());
+    emptyNote.hidden = visibleTiles > 0 || (cards.length === 0 && !!currentCollection());
     updateStatus(visibleQty, totalQty, value);
     updateFilterToggle();
   }
@@ -1851,11 +1957,13 @@ defineTemplate("mtg-to-top",
     if (token !== loadToken) return;
     const frag = document.createDocumentFragment();
     for (const card of batch) {
-      if (cardEls.has(card.id)) continue;
+      const uid = uidOf(card);
+      if (cardEls.has(uid)) continue;
       cards.push(card);
+      finalizePrice(card);
       if (pendingCmPrices) applyCardmarketPrice(card, pendingCmPrices);
       const el = buildCardEl(card);
-      cardEls.set(card.id, el);
+      cardEls.set(uid, el);
       frag.appendChild(el);
     }
     grid.appendChild(frag);
@@ -1935,6 +2043,17 @@ defineTemplate("mtg-to-top",
     view = "gallery";
     localStorage.setItem(VIEW_KEY, view);
     applyView();
+  });
+
+  // Prints-bündeln-Toggle (rein visuell, Daten bleiben je Print getrennt)
+  let groupPrints = localStorage.getItem(GROUP_KEY) === "1";
+  const groupBtn = document.getElementById("group-toggle");
+  groupBtn.classList.toggle("active", groupPrints);
+  groupBtn.addEventListener("click", () => {
+    groupPrints = !groupPrints;
+    localStorage.setItem(GROUP_KEY, groupPrints ? "1" : "0");
+    groupBtn.classList.toggle("active", groupPrints);
+    applyFilters();
   });
 
   colSelect.addEventListener("change", e => { if (e.target.value) switchCollection(e.target.value); });
