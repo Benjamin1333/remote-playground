@@ -1690,9 +1690,9 @@ defineTemplate("mtg-to-top",
     const col = currentCollection();
     if (!col) {
       progress.hidden = true;
-      emptyNote.innerHTML = 'Noch keine Collection vorhanden. ' +
-        '<br><br><button class="btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
-      document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
+      // Kein eigener CTA-Button: „+ Neu“ in der Collection-Leiste direkt
+      // darüber ist die eine Stelle zum Anlegen.
+      emptyNote.textContent = "Noch keine Collection vorhanden – oben mit „+ Neu“ anlegen.";
       emptyNote.hidden = false;
       applyFilters();
       return;
