@@ -38,7 +38,7 @@
      dieselben Klassen/IDs mit wie zuvor, das Styling bleibt unverändert. */
   mtg-app-header, mtg-collection-bar, mtg-filter-controls, mtg-status-bar,
   mtg-compare-bar, mtg-share-bar, mtg-progress-bar, mtg-filter-bar,
-  mtg-filter-sheet, mtg-detail-panel, mtg-detail-sheet,
+  mtg-filter-sheet, mtg-detail-panel, mtg-detail-sheet, mtg-add-fab,
   mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
 
   header {
@@ -47,7 +47,7 @@
   }
   header h1 {
     margin: 0;
-    font-size: 1.35rem;
+    font-size: clamp(1.15rem, 1rem + 1.2vw, 1.45rem);
     letter-spacing: 0.5px;
     white-space: nowrap;
   }
@@ -196,7 +196,8 @@
     .btn, .cmp-chip { min-height: 44px; }
     .grid { padding: 8px 12px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
     .empty-note { padding-bottom: 110px; }
-    .to-top { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+    /* FAB sitzt rechts – der To-Top-Knopf weicht nach links aus */
+    .to-top { left: 14px; right: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
@@ -336,6 +337,45 @@
     border-top: 1px solid var(--border);
   }
   .sheet-footer .btn { width: 100%; min-height: 46px; }
+  .sheet-header.compact { padding: 16px 0 4px; border-bottom: none; }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Sanftes Hochgleiten der Sheets (entfällt bei prefers-reduced-motion) */
+  dialog.sheet[open] {
+    translate: 0 0;
+    transition: translate 0.22s ease;
+    @starting-style { translate: 0 60%; }
+  }
+
+  /* FAB: Karten hinzufügen – die eine Primäraktion, Daumen-Zone (nur mobil) */
+  .add-fab {
+    display: none;
+    position: fixed;
+    right: 14px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--accent-2);
+    background: var(--accent-2);
+    color: #fff;
+    font-size: 1.7rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 45;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  }
+  .add-fab:active { transform: scale(0.96); }
+  @media (max-width: 1023.98px) {
+    .add-fab { display: block; }
+  }
 
   /* Aktive Filter als entfernbare Chips über dem Grid (nur mobil/Tablet) */
   .chips-row {
@@ -770,6 +810,7 @@
 <mtg-filter-bar></mtg-filter-bar>
 <mtg-filter-sheet></mtg-filter-sheet>
 <mtg-detail-sheet></mtg-detail-sheet>
+<mtg-add-fab></mtg-add-fab>
 <mtg-collection-modal></mtg-collection-modal>
 <mtg-compare-modal></mtg-compare-modal>
 <mtg-to-top></mtg-to-top>
@@ -907,13 +948,16 @@ defineTemplate("mtg-detail-panel", `
 
 defineTemplate("mtg-detail-sheet", `
   <dialog class="sheet" id="detail-sheet" aria-label="Kartendetails">
-    <div class="sheet-header">
+    <div class="sheet-header compact">
       <div class="grabber" aria-hidden="true"></div>
-      <h2 id="detail-sheet-title">Kartendetails</h2>
+      <h2 id="detail-sheet-title" class="visually-hidden">Kartendetails</h2>
       <button class="sheet-close" id="detail-sheet-close" aria-label="Schließen">✕</button>
     </div>
     <div class="sheet-body" id="detail-sheet-body"></div>
   </dialog>`);
+
+defineTemplate("mtg-add-fab",
+  `<button class="add-fab" id="add-fab" aria-label="Karten hinzufügen" title="Karten hinzufügen">+</button>`);
 
 defineTemplate("mtg-status-bar", `<div class="status-bar" id="status"></div>`);
 
@@ -2487,6 +2531,10 @@ defineTemplate("mtg-to-top",
   document.getElementById("col-new").addEventListener("click", () => openModal("create"));
   document.getElementById("col-add").addEventListener("click", () => {
     if (currentCollection()) openModal("add");
+  });
+  // FAB (mobil): Karten zur aktuellen Collection hinzufügen, sonst neue anlegen
+  document.getElementById("add-fab").addEventListener("click", () => {
+    openModal(currentCollection() ? "add" : "create");
   });
   document.getElementById("col-cancel").addEventListener("click", closeModal);
   document.getElementById("col-create").addEventListener("click", handleModalSubmit);
