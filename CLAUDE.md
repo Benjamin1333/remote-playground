@@ -140,3 +140,10 @@ Entscheidung, keine Nachlässigkeit (siehe Technologie-Entscheidungen).
 - `localStorage`-Schemata nur mit Versions-Bump ändern (`…-v3` → `…-v4`) und
   alte Keys aufräumen; Collections-Format möglichst abwärtskompatibel halten
   (alte Einträge ohne `foil` gelten als Normal).
+
+## Workflow
+
+- Nach jedem Push einen klickbaren Link zur Web-Vorschau posten, auf den
+  Commit-Hash gepinnt (umgeht den Branch-Cache von githack):
+  `https://rawcdn.githack.com/Benjamin1333/remote-playground/<commit-sha>/index.html`
+  Funktioniert nur, solange das Repo public ist.
