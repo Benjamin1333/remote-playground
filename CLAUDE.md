@@ -125,11 +125,19 @@ Entscheidung, keine Nachlässigkeit (siehe Technologie-Entscheidungen).
 - Lokal ausliefern: `http-server -p 8123` (o. ä.) im Repo-Root; `prices.json`
   fehlt lokal → App fällt auf Scryfall-Preise zurück (gewollt).
 - Syntax-Check des Inline-Scripts: Script-Block extrahieren und `node --check`.
-- E2E-Smoke-Test: Playwright/Chromium headless gegen den lokalen Server, dabei
-  `https://api.scryfall.com/cards/collection` mit Fixture-Karten mocken
-  (deterministisch, unabhängig von der Netzwerk-Policy). Kritische Pfade:
-  Collection anlegen (inkl. `*F*`-Foil-Zeile), Filter/Suche/Sortierung,
-  Favoriten, „Prints bündeln“, Persistenz nach Reload, keine Konsolen-Fehler.
+- E2E-Smoke-Test: `npm install` (einmalig), dann `npm test` – läuft via
+  `@playwright/test` gegen **Chromium und WebKit** (Safari-Engine; fängt
+  engine-spezifische Bugs wie das kollabierende Bottom-Sheet ab). Der
+  statische Server wird automatisch gestartet. WebKit braucht System-Libs
+  (`npx playwright install --with-deps webkit`); fehlen sie lokal, nur
+  `--project=chromium` fahren – in CI (`.github/workflows/e2e.yml`) laufen
+  beide. Test liegt in `tests/smoke.spec.js`; `https://api.scryfall.com/...`
+  und Kartenbilder werden gemockt (deterministisch, netzwerkunabhängig).
+  Kritische Pfade: Collection anlegen (inkl. `*F*`-Foil-Zeile),
+  Filter/Suche/Sortierung, Favoriten, „Prints bündeln“, Detail-Ansicht,
+  Filter-Sheet/FAB mobil, Persistenz nach Reload, keine Konsolen-Fehler.
+- **Test-Tooling ≠ App:** `package.json`/`node_modules` dienen nur den Tests.
+  Die App (`index.html`) bleibt bewusst ohne npm, Build-Step und Abhängigkeiten.
 - Beim Ändern von Zähl-/Preislogik immer mit einer Liste testen, die Foil-
   Duplikate enthält (`1 Name (SET) 123 *F*` + Normal-Zeile desselben Drucks).
 
