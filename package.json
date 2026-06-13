@@ -1,0 +1,14 @@
+{
+  "name": "mtg-collections-tests",
+  "private": true,
+  "description": "Entwicklungs-/Testwerkzeug für MTG Collections. Die App selbst (index.html) bleibt bewusst ohne npm, Build-Step und Abhängigkeiten – hier liegt nur die E2E-Testkette.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "http-server": "^14.1.1"
+  }
+}

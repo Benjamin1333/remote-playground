@@ -1,0 +1,157 @@
+# CLAUDE.md
+
+Anleitung für Claude Code (und andere Mitwirkende) für dieses Repository.
+
+## Projekt
+
+**MTG Collections** – ein Tracker für Magic-the-Gathering-Sammlungen
+(Schwerpunkt: TMNT-Sets). Nutzer fügen Kartenlisten ein (Arena/Moxfield-Format,
+Set-Listen, einfache Namenslisten), die App löst sie über die Scryfall-API auf
+und zeigt sie mit Preisen, Filtern, Favoriten, Collection-Vergleich und
+Live-Teilen an. UI-Sprache ist Deutsch, Code-Kommentare ebenfalls.
+
+## Aufbau
+
+| Pfad | Zweck |
+|---|---|
+| `index.html` | Die komplette App: CSS, Komponenten-Templates und Logik in einer Datei |
+| `scripts/build_prices.py` | Erzeugt `prices.json` aus dem Cardmarket Price Guide (für TMT) |
+| `.github/workflows/deploy-pages.yml` | Deployt täglich auf GitHub Pages und baut dabei `prices.json` frisch |
+
+Es gibt **keinen Build-Step, kein npm, kein Framework** – das ist eine bewusste
+Entscheidung, keine Nachlässigkeit (siehe Technologie-Entscheidungen).
+
+## Architektur
+
+- **Native Custom Elements, Light DOM.** Jede UI-Sektion ist eine Komponente
+  (`<mtg-collection-bar>`, `<mtg-filter-controls>`, `<mtg-card>` …). Die
+  Layout-Komponenten rendern reines Markup über `defineTemplate()` und behalten
+  ihre IDs/Klassen, damit CSS und Controller unverändert greifen. Kein Shadow
+  DOM – das globale Stylesheet soll gelten.
+- **`<mtg-card>`** ist die einzige Komponente mit Verhalten: eigenes Rendering,
+  Favoriten-Toggle, `refreshPrice()`, `setFiltered()`, `setOrder()`,
+  `updateQtyBadge()`. Der Controller steuert Sichtbarkeit/Reihenfolge über
+  CSS (`order`, `.filtered-out`), damit `<img>`-Elemente nie neu erzeugt werden.
+- **Controller-IIFE** am Ende von `index.html`: Zustand, Scryfall-Aufrufe,
+  Collection-Verwaltung, Filter. Komponenten werden vor dem Controller
+  registriert (synchrones Upgrade), daher findet `getElementById` alles.
+
+### Responsive Layout (Stand Phase 1 des UI-Redesigns)
+
+- **Desktop ≥ 1024px:** persistente Filter-Sidebar links (`.app-layout` als
+  Grid, `aside.filter-panel` sticky), alles sichtbar – keine versteckten
+  Controls.
+- **Mobil/Tablet < 1024px:** Sidebar versteckt. Die **selben** Filter-Elemente
+  (`.filter-groups`) wandern per `matchMedia`-Listener in ein natives
+  `<dialog>`-Bottom-Sheet (`<mtg-filter-sheet>`); Listener bleiben erhalten,
+  IDs ändern sich nicht. Geöffnet über die fixe Leiste `<mtg-filter-bar>`
+  in der Daumen-Zone (mit Aktiv-Zähler und Ergebnis-Zähler); der
+  Sheet-Apply-Button zeigt live „Zeige N Karten“.
+- **Aktive Filter** erscheinen mobil als entfernbare Chips
+  (`<mtg-filter-chips>`, vom Controller über `render()` befüllt).
+- **Breakpoints:** 1024px (Sidebar ↔ Sheet), 600px (Grid 2-spaltig kompakt).
+  Touch-Ziele < 1024px: min. 44px (Apple HIG/WCAG 2.5.5). Safe-Area-Insets
+  (`env(safe-area-inset-bottom)`) an fixer Leiste, Sheet-Footer und To-Top.
+- **Detail-on-Demand (Phase 2):** Klick/Tap auf eine Kachel öffnet die
+  Detail-Ansicht (`renderCardDetail()` in `#card-detail`): großes Bild,
+  Typ-/Oracle-/Flavor-Text, Preisaufschlüsselung Normal/Foil/Trend,
+  Scryfall-/Cardmarket-Links. Desktop: Master-Detail-Panel als dritte
+  Grid-Spalte (`<mtg-detail-panel>`, sticky); mobil: eigenes Bottom-Sheet
+  (`<mtg-detail-sheet>`). Der Inhalt wandert wie die Filter-Gruppen per
+  `matchMedia` zwischen beiden Hosts.
+- **A11y-Muster `<mtg-card>`:** Der Bildbereich ist ein echter `<button>`
+  (öffnet Details, Tastatur inklusive); Favoriten-Stern und Cardmarket-Link
+  liegen **außerhalb** davon – niemals Interaktives in den Bild-Button
+  verschachteln (axe `nested-interactive`). Stern/Link haben ≥30px-Targets.
+- **Bewusster Trade-off:** Pinch-/Doppeltipp-Zoom ist absichtlich deaktiviert
+  (App-Gefühl); axe meldet das als `meta-viewport`. Nicht „fixen“, ohne die
+  Produktentscheidung zu revidieren.
+
+### Datenmodell
+
+- Collections in `localStorage` (`mtg-collections-v1`):
+  `entries: [{ id, qty, foil? }]` – **jede Print-Variante ist ein eigener
+  Eintrag** (Foil getrennt von Normal, wie bei Moxfield/Archidekt).
+- Anzeige-Schlüssel `uid = scryfallId + (foil ? ":f" : "")` – gilt für
+  `cardEls`, Favoriten und Live-Share. Nicht-Foil nutzt die nackte ID, damit
+  alte Favoriten gültig bleiben.
+- Karten-Cache `mtg-card-cache-v3` mit getrennten Preisen `priceEur`/`priceFoil`;
+  `finalizePrice()` bestimmt je Exemplar den wirksamen Preis (Foil-Exemplare →
+  Foil-Preis, Fallback auf die jeweils andere Variante).
+- Zähllogik: Anzeigen (Dropdown, Statusleiste) zählen **physische Karten**
+  (Summe `qty`), nicht verschiedene Drucke.
+- Der Toggle „Prints bündeln“ (`mtg-group-v1`) gruppiert Kacheln gleichen
+  Kartennamens **rein visuell** (Sammel-Badge `7× · 2 Prints`); Daten und
+  Wertberechnung bleiben je Print getrennt.
+
+### Externe Dienste
+
+- **Scryfall** (`/cards/collection`, Fuzzy-Suche) – Karten-Auflösung; Batches à
+  75, Foil/Normal desselben Drucks teilen sich einen Identifier.
+- **Cardmarket-Preise** über `prices.json` (vom Workflow erzeugt, `low`/`lowFoil`/`trend`).
+- **kvdb.io** – Live-Teilen von Collections (Bucket-Keys nur lokal gespeichert).
+
+## CSS-Konventionen
+
+- **Design-Tokens in `:root`**: Farben (`--bg`, `--panel`, `--accent`, `--gold`,
+  `--border` …) sowie `--radius` (8px, Standard für Bedienelemente) und
+  `--btn-pad`. Neue Controls nutzen diese Tokens, keine hartkodierten Werte.
+- **Eine Button-Basisklasse `.btn`** mit Modifikatoren:
+  - `.btn.primary` – Hauptaktion (grüner Rand)
+  - `.btn.active` – gewählter Zustand (Akzentfarbe, z. B. Ansicht-Buttons)
+  - `.btn.gold.active` – gewählter Zustand in Gold (Favoriten-Filter)
+  - JS toggelt nur die Klasse `active`; die Farbvariante kommt von der
+    statischen Klasse (`gold`).
+  - Neue Buttons bekommen `.btn` – keine neuen Button-Klassen mit kopierten
+    Eigenschaften anlegen.
+
+## Technologie-Entscheidungen
+
+- **Kein Framework (React/Vue/…):** Die App ist klein genug, dass manuelles
+  Rendering beherrschbar ist; Custom Elements liefern die Komponentenstruktur
+  ohne Build-Step. Eine Framework-Migration wurde erwogen und verworfen.
+- **Kein Tailwind (Stand 2026-06):** Ohne Compiler bliebe nur das Play CDN –
+  von Tailwind selbst nicht für Produktion empfohlen (Laufzeit-Generierung,
+  FOUC, CDN-Abhängigkeit bei jedem Aufruf). Die Probleme, die Tailwind löst,
+  sind hier bereits anders gelöst: Design-Tokens in `:root`, semantische
+  komponentenbezogene Klassen, `.btn`-Basisklasse gegen Stil-Drift. Utility-
+  Ketten in den `defineTemplate`-Strings würden die Templates unleserlicher
+  machen. **Neu bewerten, falls je ein Build-Step eingeführt wird.**
+- **Kein Shadow DOM:** globales Stylesheet + Light DOM ist hier einfacher und
+  performanter; Kapselung ist über Klassen-Namespaces ausreichend.
+
+## Entwickeln & Testen
+
+- Lokal ausliefern: `http-server -p 8123` (o. ä.) im Repo-Root; `prices.json`
+  fehlt lokal → App fällt auf Scryfall-Preise zurück (gewollt).
+- Syntax-Check des Inline-Scripts: Script-Block extrahieren und `node --check`.
+- E2E-Smoke-Test: `npm install` (einmalig), dann `npm test` – läuft via
+  `@playwright/test` gegen **Chromium und WebKit** (Safari-Engine; fängt
+  engine-spezifische Bugs wie das kollabierende Bottom-Sheet ab). Der
+  statische Server wird automatisch gestartet. WebKit braucht System-Libs
+  (`npx playwright install --with-deps webkit`); fehlen sie lokal, nur
+  `--project=chromium` fahren – in CI (`.github/workflows/e2e.yml`) laufen
+  beide. Test liegt in `tests/smoke.spec.js`; `https://api.scryfall.com/...`
+  und Kartenbilder werden gemockt (deterministisch, netzwerkunabhängig).
+  Kritische Pfade: Collection anlegen (inkl. `*F*`-Foil-Zeile),
+  Filter/Suche/Sortierung, Favoriten, „Prints bündeln“, Detail-Ansicht,
+  Filter-Sheet/FAB mobil, Persistenz nach Reload, keine Konsolen-Fehler.
+- **Test-Tooling ≠ App:** `package.json`/`node_modules` dienen nur den Tests.
+  Die App (`index.html`) bleibt bewusst ohne npm, Build-Step und Abhängigkeiten.
+- Beim Ändern von Zähl-/Preislogik immer mit einer Liste testen, die Foil-
+  Duplikate enthält (`1 Name (SET) 123 *F*` + Normal-Zeile desselben Drucks).
+
+## Konventionen
+
+- Alles bleibt in `index.html`; UI-Texte und Kommentare auf Deutsch.
+- IDs der Bedienelemente nicht umbenennen (Controller + Tests hängen daran).
+- `localStorage`-Schemata nur mit Versions-Bump ändern (`…-v3` → `…-v4`) und
+  alte Keys aufräumen; Collections-Format möglichst abwärtskompatibel halten
+  (alte Einträge ohne `foil` gelten als Normal).
+
+## Workflow
+
+- Nach jedem Push einen klickbaren Link zur Web-Vorschau posten, auf den
+  Commit-Hash gepinnt (umgeht den Branch-Cache von githack):
+  `https://rawcdn.githack.com/Benjamin1333/remote-playground/<commit-sha>/index.html`
+  Funktioniert nur, solange das Repo public ist.

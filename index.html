@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>MTG Collections</title>
 <style>
   :root {
@@ -15,6 +15,9 @@
     --accent-2: #2e8b57;
     --gold: #f2c14e;
     --border: #2e3a44;
+    /* Design-Tokens für Bedienelemente – neue Controls nutzen diese Werte */
+    --radius: 8px;
+    --btn-pad: 7px 12px;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -30,13 +33,21 @@
     background: var(--bg);
     color: var(--text);
   }
+
+  /* Layout-Komponenten sind transparente Wrapper: ihre Vorlagen bringen
+     dieselben Klassen/IDs mit wie zuvor, das Styling bleibt unverändert. */
+  mtg-app-header, mtg-collection-bar, mtg-filter-controls, mtg-status-bar,
+  mtg-compare-bar, mtg-share-bar, mtg-progress-bar, mtg-filter-bar,
+  mtg-filter-sheet, mtg-detail-panel, mtg-detail-sheet, mtg-add-fab,
+  mtg-collection-modal, mtg-compare-modal, mtg-to-top { display: contents; }
+
   header {
     padding: 14px 16px 0;
     text-align: center;
   }
   header h1 {
     margin: 0;
-    font-size: 1.35rem;
+    font-size: clamp(1.15rem, 1rem + 1.2vw, 1.45rem);
     letter-spacing: 0.5px;
     white-space: nowrap;
   }
@@ -55,22 +66,35 @@
     display: flex;
     gap: 8px;
   }
-  .collection-actions > .bar-btn { flex: 1; }
+  .collection-actions > .btn { flex: 1; }
   .more-wrap { flex: 0 0 auto; }
-  .more-wrap > .bar-btn { width: 100%; min-width: 48px; height: 100%; }
-  .bar-btn {
+  .more-wrap > .btn { width: 100%; min-width: 48px; height: 100%; }
+  /* Basisklasse aller Schaltflächen. Zustände über Modifikatoren:
+     .primary (Hauptaktion), .active (gewählt, Akzentfarbe),
+     .gold.active (gewählt, Gold – z. B. Favoriten-Filter) */
+  .btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
+    border-radius: var(--radius);
+    padding: var(--btn-pad);
     font-size: 0.9rem;
     cursor: pointer;
   }
-  .bar-btn:hover { border-color: var(--accent); }
-  .bar-btn.primary { border-color: var(--accent-2); color: var(--accent); }
-  .bar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .bar-btn:disabled:hover { border-color: var(--border); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { border-color: var(--accent-2); color: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); }
+  .btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 8px rgba(76,201,100,0.3);
+  }
+  .btn.gold.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 8px rgba(242,193,78,0.35);
+  }
 
   .more-wrap { position: relative; }
   .more-menu {
@@ -132,7 +156,7 @@
     top: 8px;
     left: 8px;
     max-width: calc(100% - 16px);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 3px 8px;
     font-size: 0.78rem;
     font-weight: 700;
@@ -162,64 +186,297 @@
 
   .modal-small { max-width: 420px; }
 
-  /* Mobile: größere Touch-Ziele, 16px-Inputs gegen iOS-Auto-Zoom */
-  @media (max-width: 700px) {
+  /* Touch-Geräte/Mobil & Tablet: 44px-Touch-Ziele (Apple HIG / WCAG 2.5.5),
+     16px-Inputs gegen iOS-Auto-Zoom, Platz für die fixe Filter-Leiste */
+  @media (max-width: 1023.98px) {
     input[type="number"], input[type="search"], input[type="text"], select, textarea {
       font-size: 16px;
     }
-    .color-btn { width: 42px; height: 42px; }
-    .bar-btn, .view-btn, .fav-filter-btn, .cmp-chip { min-height: 42px; }
-    .grid { padding: 8px 12px 48px; gap: 12px; }
+    .color-btn { width: 44px; height: 44px; }
+    .btn, .cmp-chip { min-height: 44px; }
+    .grid { padding: 8px 12px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
+    .empty-note { padding-bottom: 110px; }
+    /* FAB sitzt rechts – der To-Top-Knopf weicht nach links aus */
+    .to-top { left: 14px; right: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
 
-  .controls {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    padding: 12px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: center;
-    justify-content: center;
-    margin-top: 16px;
+  /* ===== Responsive App-Layout =====
+     Desktop (≥1024px): persistente Filter-Sidebar links neben dem Inhalt.
+     Mobil/Tablet: Sidebar versteckt; die Filter-Gruppen wandern per JS in
+     das Bottom-Sheet, geöffnet über die fixe Leiste in der Daumen-Zone. */
+  .app-layout { display: block; }
+  .content { min-width: 0; }
+  .filter-panel { display: none; }
+  @media (min-width: 1024px) {
+    .app-layout {
+      display: grid;
+      /* Sidebar | Inhalt | Detail-Panel (kollabiert, solange [hidden]) */
+      grid-template-columns: 264px minmax(0, 1fr) auto;
+    }
+    .filter-panel {
+      display: block;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100dvh;
+      overflow-y: auto;
+      padding: 18px 16px 28px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+    }
   }
-  /* Auf dem Desktop verhält sich der Wrapper wie nicht vorhanden */
   .filter-groups {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
-  .filter-toggle {
-    display: none;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 0.92rem;
-    cursor: pointer;
-    width: 100%;
-  }
-  @media (max-width: 700px) {
-    .filter-toggle { display: block; }
-    .controls.collapsed .filter-groups { display: none; }
-    .controls { padding: 10px 16px; gap: 10px; }
-  }
+  .filter-groups input[type="search"],
+  .filter-groups select { width: 100%; }
+  .filter-groups input[type="number"] { flex: 1; min-width: 0; width: 90px; }
   .control-group {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    flex-wrap: wrap;
   }
   .control-group .label {
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--muted);
+  }
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Fixe Filter-Leiste (nur mobil/Tablet) – sitzt in der Daumen-Zone */
+  .filter-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(26, 33, 40, 0.92);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+  }
+  .filter-bar .btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 44px;
+  }
+  .filter-bar .bar-count { color: var(--muted); font-size: 0.84rem; }
+  @media (min-width: 1024px) {
+    .filter-bar { display: none; }
+  }
+
+  /* Bottom-Sheet (natives <dialog>): Grid bleibt hinter dem Scrim sichtbar */
+  dialog.sheet {
+    width: 100%;
+    max-width: 640px;
+    margin: auto auto 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    background: var(--panel);
+    color: var(--text);
+    max-height: 85dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  dialog.sheet:not([open]) { display: none; }
+  dialog.sheet::backdrop { background: rgba(6, 9, 12, 0.45); }
+  body:has(dialog.sheet[open]) { overflow: hidden; }
+  .sheet-header {
+    position: relative;
+    padding: 18px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .sheet-header h2 { margin: 0; font-size: 1rem; }
+  .sheet-header .grabber {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    translate: -50% 0;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+  .sheet-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    border-radius: var(--radius);
+  }
+  .sheet-close:hover { color: var(--text); }
+  .sheet-body {
+    overflow-y: auto;
+    padding: 16px;
+    /* flex-basis auto (Inhaltshöhe), nicht 0% – sonst kollabiert der Body in
+       Safari, weil der Dialog nur max-height statt fester Höhe hat. min-height
+       0 erlaubt das Schrumpfen+Scrollen, sobald der Inhalt 85dvh übersteigt. */
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .sheet-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .sheet-footer .btn { width: 100%; min-height: 46px; }
+  .sheet-header.compact { padding: 16px 0 4px; border-bottom: none; }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Sanftes Hochgleiten der Sheets (entfällt bei prefers-reduced-motion) */
+  dialog.sheet[open] {
+    translate: 0 0;
+    transition: translate 0.22s ease;
+    @starting-style { translate: 0 60%; }
+  }
+
+  /* FAB: Karten hinzufügen – die eine Primäraktion, Daumen-Zone (nur mobil) */
+  .add-fab {
+    display: none;
+    position: fixed;
+    right: 14px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--accent-2);
+    background: var(--accent-2);
+    color: #fff;
+    font-size: 1.7rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 45;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  }
+  .add-fab:active { transform: scale(0.96); }
+  @media (max-width: 1023.98px) {
+    .add-fab { display: block; }
+  }
+
+  /* Aktive Filter als entfernbare Chips über dem Grid (nur mobil/Tablet) */
+  .chips-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 16px 10px;
+    scrollbar-width: none;
+  }
+  .chips-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--panel-2);
+    border: 1px solid var(--accent-2);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 0.82rem;
+    min-height: 38px;
+    cursor: pointer;
+  }
+  .chip .x { color: var(--muted); }
+  .chip:hover .x { color: var(--text); }
+  .chip.clear { border-color: var(--border); color: var(--muted); }
+  .chips-row[hidden] { display: none; }
+  @media (min-width: 1024px) {
+    mtg-filter-chips { display: none; }
+  }
+
+  /* Detail-on-Demand: Master-Detail-Panel (Desktop) bzw. Bottom-Sheet (mobil).
+     Der Inhalt #card-detail wandert per JS zwischen beiden Hosts. */
+  .detail-panel {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    width: 340px;
+    max-height: 100dvh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 16px 16px 24px;
+  }
+  .detail-panel .sheet-close { position: absolute; top: 6px; right: 6px; z-index: 1; }
+  @media (max-width: 1023.98px) {
+    .detail-panel { display: none !important; }
+  }
+  .card-detail .detail-img {
+    width: 100%;
+    aspect-ratio: 488 / 680;
+    object-fit: cover;
+    border-radius: 10px;
+    background: #0a0d10;
+  }
+  .detail-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .detail-head h3 { margin: 12px 0 0; font-size: 1.05rem; line-height: 1.3; }
+  .detail-head .fav-btn { font-size: 1.4rem; margin-top: 10px; }
+  .detail-meta { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+  .detail-meta .foil { color: var(--gold); }
+  .detail-type { margin-top: 10px; font-size: 0.87rem; font-weight: 600; }
+  .detail-oracle { margin-top: 8px; font-size: 0.85rem; line-height: 1.55; }
+  .detail-flavor {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .detail-prices {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .detail-prices .now { font-size: 1.05rem; font-weight: 700; color: var(--accent); }
+  .detail-prices .now.unknown { color: var(--muted); font-weight: 400; }
+  .detail-prices .now small { color: var(--muted); font-weight: 400; }
+  .detail-prices .lbl { color: var(--muted); }
+  .detail-links { margin-top: 14px; display: flex; gap: 8px; }
+  .detail-links .btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
   }
   .color-btn {
     width: 34px;
@@ -250,7 +507,7 @@
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 7px 10px;
     font-size: 0.9rem;
     font-family: inherit;
@@ -259,36 +516,6 @@
   input[type="search"] { width: 200px; }
   input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
-  .view-btn {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .view-btn:hover { border-color: var(--accent); }
-  .view-btn.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 8px rgba(76,201,100,0.3);
-  }
-
-  .fav-filter-btn {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .fav-filter-btn.active {
-    border-color: var(--gold);
-    color: var(--gold);
-    box-shadow: 0 0 8px rgba(242,193,78,0.35);
-  }
   .reset-btn {
     background: none;
     border: none;
@@ -353,11 +580,21 @@
     contain-intrinsic-size: 230px 420px;
   }
   .card.filtered-out { display: none; }
+  .card { cursor: pointer; }
   .card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 22px rgba(0,0,0,0.5);
   }
-  .card a.img-link { display: block; line-height: 0; }
+  .card .img-link {
+    display: block;
+    line-height: 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .card .img-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .card img {
     width: 100%;
     aspect-ratio: 488 / 680;
@@ -380,6 +617,7 @@
     font-size: 0.75rem;
     color: var(--muted);
   }
+  .card .meta .foil { color: var(--gold); }
   .card .price-line {
     margin-top: auto;
     display: flex;
@@ -416,7 +654,15 @@
     color: #aab4bd;
     flex-shrink: 0;
     transition: transform 0.1s, color 0.1s;
+    /* Mindest-Touchziel (WCAG 2.5.8), ohne die Zeile aufzublähen */
+    min-width: 30px;
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -5px -6px 0 0;
   }
+  .card .cm-link { display: inline-block; padding: 5px 0; }
   .fav-btn:hover { transform: scale(1.2); color: var(--gold); }
   .fav-btn.faved { color: var(--gold); }
 
@@ -427,7 +673,7 @@
     background: rgba(10,13,16,0.78);
     border: 1px solid var(--gold);
     color: var(--gold);
-    border-radius: 8px;
+    border-radius: var(--radius);
     padding: 3px 8px;
     font-size: 0.82rem;
     font-weight: 700;
@@ -439,7 +685,7 @@
     gap: 10px;
   }
   .grid.gallery .card {
-    border-radius: 8px;
+    border-radius: var(--radius);
     contain-intrinsic-size: 160px 310px;
   }
   .grid.gallery .card .info { padding: 7px 8px 9px; gap: 2px; }
@@ -454,6 +700,20 @@
     left: 6px;
     padding: 2px 6px;
     font-size: 0.74rem;
+  }
+
+  /* Schmale Screens: 2 Spalten statt einer Riesen-Kachel – mehr Scan-Dichte.
+     Steht nach den .grid-/Galerie-Regeln, um sie bei gleicher Spezifität zu
+     überschreiben. */
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); }
+    .card .info { padding: 8px 9px 10px; gap: 3px; }
+    .card .name { font-size: 0.8rem; }
+    .card .meta { font-size: 0.68rem; }
+    .card .price { font-size: 0.84rem; }
+    .card .price small { font-size: 0.66rem; }
+    .card .cm-link { font-size: 0.66rem; }
+    .qty-badge { top: 6px; left: 6px; padding: 2px 6px; font-size: 0.74rem; }
   }
 
   .rarity-C { color: #c7c1b8; }
@@ -481,7 +741,7 @@
     border: none;
     color: #fff;
     padding: 8px 18px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     cursor: pointer;
   }
 
@@ -536,150 +796,253 @@
 </head>
 <body>
 
-<header>
-  <h1>🃏 MTG <span>Collections</span></h1>
-</header>
+<mtg-app-header></mtg-app-header>
+<mtg-collection-bar></mtg-collection-bar>
 
-<div class="collection-bar">
-  <select id="collection-select" aria-label="Collection auswählen"></select>
-  <div class="collection-actions">
-    <button class="bar-btn primary" id="col-new">+ Neu</button>
-    <button class="bar-btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
-    <button class="bar-btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
-    <div class="more-wrap">
-      <button class="bar-btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
-      <div class="more-menu" id="more-menu" hidden>
-        <button id="col-rename">Umbenennen</button>
-        <button id="col-live">Live-Link teilen</button>
-        <button id="col-live-stop">Live-Teilen beenden</button>
-        <button id="col-export">Export als JSON</button>
-        <button id="col-import-btn">Import aus JSON</button>
-        <button id="col-delete" class="danger">Collection löschen</button>
+<div class="app-layout">
+  <mtg-filter-controls></mtg-filter-controls>
+  <main class="content">
+    <mtg-status-bar></mtg-status-bar>
+    <mtg-compare-bar></mtg-compare-bar>
+    <mtg-share-bar></mtg-share-bar>
+    <mtg-filter-chips hidden></mtg-filter-chips>
+    <mtg-progress-bar></mtg-progress-bar>
+    <div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <mtg-detail-panel></mtg-detail-panel>
+</div>
+
+<mtg-filter-bar></mtg-filter-bar>
+<mtg-filter-sheet></mtg-filter-sheet>
+<mtg-detail-sheet></mtg-detail-sheet>
+<mtg-add-fab></mtg-add-fab>
+<mtg-collection-modal></mtg-collection-modal>
+<mtg-compare-modal></mtg-compare-modal>
+<mtg-to-top></mtg-to-top>
+
+<script>
+// =====================================================================
+//  UI-Komponenten (Custom Elements)
+// ---------------------------------------------------------------------
+//  Jede Sektion der Oberfläche ist eine eigene Komponente. Die Layout-
+//  Komponenten rendern reines Markup (Light DOM, kein Shadow DOM), damit
+//  das bestehende CSS unverändert greift, und behalten ihre IDs, sodass
+//  der App-Controller die Elemente weiterhin per getElementById findet.
+// =====================================================================
+
+// Hilfsfunktion für reine Markup-Komponenten ohne eigenes Verhalten.
+function defineTemplate(tag, html) {
+  customElements.define(tag, class extends HTMLElement {
+    connectedCallback() {
+      if (this._rendered) return;
+      this._rendered = true;
+      this.innerHTML = html;
+    }
+  });
+}
+
+defineTemplate("mtg-app-header", `
+  <header>
+    <h1>🃏 MTG <span>Collections</span></h1>
+  </header>`);
+
+defineTemplate("mtg-collection-bar", `
+  <div class="collection-bar">
+    <select id="collection-select" aria-label="Collection auswählen"></select>
+    <div class="collection-actions">
+      <button class="btn primary" id="col-new">+ Neu</button>
+      <button class="btn" id="col-add" title="Karten zur aktuellen Collection hinzufügen">+ Karten</button>
+      <button class="btn" id="col-compare" title="Zwei Collections vergleichen">⇄ Vergleichen</button>
+      <div class="more-wrap">
+        <button class="btn" id="col-more" aria-haspopup="true" aria-expanded="false" title="Weitere Aktionen">⋯</button>
+        <div class="more-menu" id="more-menu" hidden>
+          <button id="col-rename">Umbenennen</button>
+          <button id="col-live">Live-Link teilen</button>
+          <button id="col-live-stop">Live-Teilen beenden</button>
+          <button id="col-export">Export als JSON</button>
+          <button id="col-import-btn">Import aus JSON</button>
+          <button id="col-delete" class="danger">Collection löschen</button>
+        </div>
       </div>
     </div>
-  </div>
-  <input type="file" id="col-import" accept="application/json,.json" hidden>
-</div>
+    <input type="file" id="col-import" accept="application/json,.json" hidden>
+  </div>`);
 
-<div class="controls collapsed" id="controls">
-  <button class="filter-toggle" id="filter-toggle">Filter &amp; Suche ▾</button>
-  <div class="filter-groups">
-  <div class="control-group">
-    <span class="label">Farbe</span>
-    <button class="color-btn" data-color="W" title="Weiß">W</button>
-    <button class="color-btn" data-color="U" title="Blau">U</button>
-    <button class="color-btn" data-color="B" title="Schwarz">B</button>
-    <button class="color-btn" data-color="R" title="Rot">R</button>
-    <button class="color-btn" data-color="G" title="Grün">G</button>
-    <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
-    <button class="color-btn" data-color="C" title="Farblos">C</button>
-  </div>
-  <div class="control-group">
-    <span class="label">Preis €</span>
-    <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
-    <span style="color:var(--muted)">–</span>
-    <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
-  </div>
-  <div class="control-group">
-    <span class="label">Ansicht</span>
-    <button class="view-btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
-    <button class="view-btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
-  </div>
-  <div class="control-group">
-    <span class="label">Sortierung</span>
-    <select id="sort">
-      <option value="number">Sammlernummer</option>
-      <option value="price-desc">Preis absteigend</option>
-      <option value="price-asc">Preis aufsteigend</option>
-      <option value="name">Name A–Z</option>
-    </select>
-  </div>
-  <div class="control-group">
-    <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
-  </div>
-  <div class="control-group">
-    <button class="fav-filter-btn" id="fav-filter">★ Nur Favoriten</button>
-    <button class="reset-btn" id="reset">Filter zurücksetzen</button>
-  </div>
-  </div>
-</div>
+defineTemplate("mtg-filter-controls", `
+  <aside class="filter-panel" id="controls" aria-label="Filter und Sortierung">
+    <div class="filter-groups">
+      <div class="control-group">
+        <div class="control-row">
+          <input type="search" id="search" placeholder="Name, Typ oder Kartentext …">
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Farbe</span>
+        <div class="control-row">
+          <button class="color-btn" data-color="W" title="Weiß">W</button>
+          <button class="color-btn" data-color="U" title="Blau">U</button>
+          <button class="color-btn" data-color="B" title="Schwarz">B</button>
+          <button class="color-btn" data-color="R" title="Rot">R</button>
+          <button class="color-btn" data-color="G" title="Grün">G</button>
+          <button class="color-btn" data-color="M" title="Mehrfarbig">M</button>
+          <button class="color-btn" data-color="C" title="Farblos">C</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Preis €</span>
+        <div class="control-row">
+          <input type="number" id="price-min" min="0" step="0.5" placeholder="min">
+          <span style="color:var(--muted)">–</span>
+          <input type="number" id="price-max" min="0" step="0.5" placeholder="max">
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Sortierung</span>
+        <div class="control-row">
+          <select id="sort" aria-label="Sortierung">
+            <option value="number">Sammlernummer</option>
+            <option value="price-desc">Preis absteigend</option>
+            <option value="price-asc">Preis aufsteigend</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label">Ansicht</span>
+        <div class="control-row">
+          <button class="btn" id="view-detail" title="Detailansicht mit Preisen">☰ Details</button>
+          <button class="btn" id="view-gallery" title="Kompakte Galerie – mehr Karten pro Zeile">▦ Galerie</button>
+          <button class="btn" id="group-toggle" title="Verschiedene Prints derselben Karte (Foil, Showcase …) zu einer Kachel zusammenfassen">⧉ Prints bündeln</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <div class="control-row">
+          <button class="btn gold" id="fav-filter">★ Nur Favoriten</button>
+          <button class="reset-btn" id="reset">Filter zurücksetzen</button>
+        </div>
+      </div>
+    </div>
+  </aside>`);
 
-<div class="status-bar" id="status"></div>
+defineTemplate("mtg-filter-bar", `
+  <div class="filter-bar">
+    <button class="btn" id="filter-toggle" aria-haspopup="dialog">
+      <span id="filter-toggle-label">⚙ Filter &amp; Sortieren</span>
+      <span class="bar-count" id="filter-toggle-count"></span>
+    </button>
+  </div>`);
 
-<div class="compare-bar" id="compare-bar" hidden>
-  <span class="cmp-title" id="compare-title"></span>
-  <div class="cmp-chips" id="cmp-chips">
-    <button class="cmp-chip active" data-cmp="all">Alle</button>
-    <button class="cmp-chip" data-cmp="both">In beiden</button>
-    <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
-    <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
-  </div>
-  <button class="bar-btn" id="compare-exit">Vergleich beenden</button>
-</div>
+defineTemplate("mtg-filter-sheet", `
+  <dialog class="sheet" id="filter-sheet" aria-label="Filter und Sortierung">
+    <div class="sheet-header">
+      <div class="grabber" aria-hidden="true"></div>
+      <h2>Filter &amp; Sortieren</h2>
+      <button class="sheet-close" id="filter-sheet-close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="sheet-body" id="filter-sheet-body"></div>
+    <div class="sheet-footer">
+      <button class="btn primary" id="filter-sheet-apply">Zeige alle Karten</button>
+    </div>
+  </dialog>`);
 
-<div class="compare-bar" id="share-bar" hidden>
-  <span class="cmp-title" id="share-title"></span>
-  <button class="bar-btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
-  <button class="bar-btn" id="share-close">Schließen</button>
-</div>
+defineTemplate("mtg-detail-panel", `
+  <aside class="detail-panel" id="detail-panel" hidden aria-label="Kartendetails">
+    <button class="sheet-close" id="detail-close" aria-label="Details schließen">✕</button>
+    <div class="card-detail" id="card-detail"></div>
+  </aside>`);
 
-<div class="progress-wrap" id="progress">
-  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-  <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
-</div>
+defineTemplate("mtg-detail-sheet", `
+  <dialog class="sheet" id="detail-sheet" aria-label="Kartendetails">
+    <div class="sheet-header compact">
+      <div class="grabber" aria-hidden="true"></div>
+      <h2 id="detail-sheet-title" class="visually-hidden">Kartendetails</h2>
+      <button class="sheet-close" id="detail-sheet-close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="sheet-body" id="detail-sheet-body"></div>
+  </dialog>`);
 
-<div class="empty-note" id="empty-note" hidden>Keine Karten gefunden – Filter anpassen.</div>
-<div class="grid" id="grid"></div>
+defineTemplate("mtg-add-fab",
+  `<button class="add-fab" id="add-fab" aria-label="Karten hinzufügen" title="Karten hinzufügen">+</button>`);
 
-<div class="modal-overlay" id="modal-overlay" hidden>
-  <div class="modal">
-    <h2 id="modal-title">Neue Collection anlegen</h2>
-    <div class="row">
-      <div id="col-name-wrap">
-        <label for="col-name">Name der Collection</label>
-        <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
+defineTemplate("mtg-status-bar", `<div class="status-bar" id="status"></div>`);
+
+defineTemplate("mtg-compare-bar", `
+  <div class="compare-bar" id="compare-bar" hidden>
+    <span class="cmp-title" id="compare-title"></span>
+    <div class="cmp-chips" id="cmp-chips">
+      <button class="cmp-chip active" data-cmp="all">Alle</button>
+      <button class="cmp-chip" data-cmp="both">In beiden</button>
+      <button class="cmp-chip" data-cmp="onlyA">Nur A</button>
+      <button class="cmp-chip" data-cmp="onlyB">Nur B</button>
+    </div>
+    <button class="btn" id="compare-exit">Vergleich beenden</button>
+  </div>`);
+
+defineTemplate("mtg-share-bar", `
+  <div class="compare-bar" id="share-bar" hidden>
+    <span class="cmp-title" id="share-title"></span>
+    <button class="btn primary" id="share-adopt">Als eigene Collection übernehmen</button>
+    <button class="btn" id="share-close">Schließen</button>
+  </div>`);
+
+defineTemplate("mtg-progress-bar", `
+  <div class="progress-wrap" id="progress">
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-text" id="progress-text">Verbinde mit Scryfall …</div>
+  </div>`);
+
+defineTemplate("mtg-collection-modal", `
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal">
+      <h2 id="modal-title">Neue Collection anlegen</h2>
+      <div class="row">
+        <div id="col-name-wrap">
+          <label for="col-name">Name der Collection</label>
+          <input type="text" id="col-name" placeholder="z.B. Meine TMNT-Sammlung">
+        </div>
+        <div>
+          <label for="col-set">Set-Code (optional, für Listen mit Sammlernummern)</label>
+          <input type="text" id="col-set" placeholder="z.B. tmt" maxlength="6">
+        </div>
       </div>
       <div>
-        <label for="col-set">Set-Code (optional, für Listen mit Sammlernummern)</label>
-        <input type="text" id="col-set" placeholder="z.B. tmt" maxlength="6">
-      </div>
-    </div>
-    <div>
-      <label for="col-list">Kartenliste (eine Karte pro Zeile)</label>
-      <textarea id="col-list" placeholder="4 Lightning Bolt
+        <label for="col-list">Kartenliste (eine Karte pro Zeile)</label>
+        <textarea id="col-list" placeholder="4 Lightning Bolt
 1 Leonardo, Sewer Samurai (TMT) 17
 Counterspell
 0017 Leonardo, Sewer Samurai M   ← mit Set-Code"></textarea>
-      <p class="hint">
-        Unterstützte Formate: <code>4 Name</code>, <code>4x Name</code>, nur der Kartenname,
-        Arena/Moxfield-Export <code>1 Name (SET) 123</code> sowie Set-Listen mit Sammlernummer
-        (<code>0017 Name …</code> – dann oben den Set-Code angeben).
-        Markdown-Checkboxen (<code>- [x]</code>) und Kommentarzeilen (<code>#</code>, <code>//</code>) werden ignoriert.
-      </p>
+        <p class="hint">
+          Unterstützte Formate: <code>4 Name</code>, <code>4x Name</code>, nur der Kartenname,
+          Arena/Moxfield-Export <code>1 Name (SET) 123</code> sowie Set-Listen mit Sammlernummer
+          (<code>0017 Name …</code> – dann oben den Set-Code angeben).
+          Markdown-Checkboxen (<code>- [x]</code>) und Kommentarzeilen (<code>#</code>, <code>//</code>) werden ignoriert.
+        </p>
+      </div>
+      <div class="status" id="col-status"></div>
+      <div class="buttons">
+        <button class="btn" id="col-cancel">Abbrechen</button>
+        <button class="btn primary" id="col-create">Collection erstellen</button>
+      </div>
     </div>
-    <div class="status" id="col-status"></div>
-    <div class="buttons">
-      <button class="bar-btn" id="col-cancel">Abbrechen</button>
-      <button class="bar-btn primary" id="col-create">Collection erstellen</button>
+  </div>`);
+
+defineTemplate("mtg-compare-modal", `
+  <div class="modal-overlay" id="compare-overlay" hidden>
+    <div class="modal modal-small">
+      <h2>Collections vergleichen</h2>
+      <p class="hint" id="compare-hint"></p>
+      <select id="compare-select" aria-label="Collection zum Vergleich"></select>
+      <div class="buttons">
+        <button class="btn" id="compare-cancel">Abbrechen</button>
+        <button class="btn primary" id="compare-start">Vergleichen</button>
+      </div>
     </div>
-  </div>
-</div>
+  </div>`);
 
-<div class="modal-overlay" id="compare-overlay" hidden>
-  <div class="modal modal-small">
-    <h2>Collections vergleichen</h2>
-    <p class="hint" id="compare-hint"></p>
-    <select id="compare-select" aria-label="Collection zum Vergleich"></select>
-    <div class="buttons">
-      <button class="bar-btn" id="compare-cancel">Abbrechen</button>
-      <button class="bar-btn primary" id="compare-start">Vergleichen</button>
-    </div>
-  </div>
-</div>
+defineTemplate("mtg-to-top",
+  `<button class="to-top" id="to-top" hidden aria-label="Nach oben scrollen" title="Nach oben">↑</button>`);
 
-<button class="to-top" id="to-top" hidden aria-label="Nach oben scrollen" title="Nach oben">↑</button>
-
-<script>
 (function () {
   // ===== Konstanten =====
   const COLLECTION_API = "https://api.scryfall.com/cards/collection";
@@ -687,23 +1050,24 @@ Counterspell
 
   const FAV_KEY = "tmt-favorites-v1";
   const COLLECTIONS_KEY = "mtg-collections-v1";
-  const CARD_CACHE_KEY = "mtg-card-cache-v2"; // v2: inkl. Typ-/Regel-/Flavor-Text für die Suche
+  const CARD_CACHE_KEY = "mtg-card-cache-v3"; // v3: getrennte Normal-/Foil-Preise
   const ACTIVE_KEY = "mtg-active-collection-v1";
   const VIEW_KEY = "mtg-view-v1";
-  const FILTERS_OPEN_KEY = "mtg-filters-open-v1";
+  const GROUP_KEY = "mtg-group-v1";
 
   const RARITY_LABEL = { common: "C", uncommon: "U", rare: "R", mythic: "M" };
   const RARITY_NAME = { common: "Common", uncommon: "Uncommon", rare: "Rare", mythic: "Mythic" };
 
   // ===== Zustand =====
   let cards = [];
-  const cardEls = new Map(); // card.id -> DOM-Element (pro Collection-Ansicht)
+  const cardEls = new Map(); // uid (Druck + Foil-Variante) -> <mtg-card>-Element
   let favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
   const filters = { colors: new Set(), priceMin: null, priceMax: null, sort: "number", search: "", favsOnly: false, compareFilter: "all" };
 
   let collections = loadJson(COLLECTIONS_KEY, []);
   let cardCache = loadJson(CARD_CACHE_KEY, {}); // scryfallId -> vereinfachte Karte
   localStorage.removeItem("mtg-card-cache-v1"); // alter Cache ohne Textfelder
+  localStorage.removeItem("mtg-card-cache-v2"); // alter Cache ohne getrennte Foil-Preise
   let activeId = localStorage.getItem(ACTIVE_KEY);
   if (!collections.some(c => c.id === activeId)) {
     activeId = collections.length ? collections[0].id : null;
@@ -743,11 +1107,40 @@ Counterspell
     return s.toLowerCase().replace(/’/g, "'").trim();
   }
 
+  function numOrNull(v) {
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
   function cheapestPrice(prices) {
     const vals = [prices.eur, prices.eur_foil]
       .map(parseFloat)
       .filter(v => !isNaN(v));
     return vals.length ? Math.min(...vals) : null;
+  }
+
+  // Eindeutiger Schlüssel eines Exemplars in der Ansicht: Druck + Foil-Variante.
+  // Nicht-Foil nutzt die nackte Scryfall-ID, damit alte Favoriten gültig bleiben.
+  function uidOf(card) {
+    return card.id + (card.foil ? ":f" : "");
+  }
+
+  // Wirksamen Preis je Exemplar bestimmen: Foil-Exemplare nutzen den Foil-Preis,
+  // normale den Normalpreis – mit Fallback auf den jeweils anderen (z. B. bei
+  // Foil-only-Drucken). Alte Exporte ohne getrennte Preise nutzen card.price.
+  function finalizePrice(card) {
+    const eur = card.priceEur !== undefined ? card.priceEur : (card.foilOnly ? null : card.price);
+    const foil = card.priceFoil !== undefined ? card.priceFoil : (card.foilOnly ? card.price : null);
+    if (card.foil) {
+      card.price = foil !== null && foil !== undefined ? foil : (eur ?? null);
+      card.priceIsFoil = true;
+    } else if (eur !== null && eur !== undefined) {
+      card.price = eur;
+      card.priceIsFoil = false;
+    } else {
+      card.price = foil ?? null;
+      card.priceIsFoil = card.price !== null;
+    }
   }
 
   function simplify(card) {
@@ -770,6 +1163,8 @@ Counterspell
       url: card.scryfall_uri,
       cmId: card.cardmarket_id || null,
       cmUrl: (card.purchase_uris && card.purchase_uris.cardmarket) || "",
+      priceEur: numOrNull((card.prices || {}).eur),
+      priceFoil: numOrNull((card.prices || {}).eur_foil),
       price: cheapestPrice(card.prices || {}),
       foilOnly: !(card.prices && card.prices.eur) && !!(card.prices && card.prices.eur_foil),
       trend: null
@@ -791,6 +1186,11 @@ Counterspell
     return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
   }
 
+  // Physische Stückzahl einer Collection (nicht nur verschiedene Drucke)
+  function countCards(entries) {
+    return entries.reduce((s, e) => s + (e.qty || 1), 0);
+  }
+
   // ===== Cardmarket-Preise (prices.json aus dem offiziellen Price Guide) =====
   async function loadCardmarketPrices() {
     try {
@@ -808,18 +1208,14 @@ Counterspell
   function applyCardmarketPrice(card, prices) {
     const p = card.cmId !== null ? prices[String(card.cmId)] : null;
     if (!p) return;
-    const lows = [
-      { v: p.low, foil: false },
-      { v: p.lowFoil, foil: true }
-    ].filter(x => typeof x.v === "number");
-    if (!lows.length) return;
-    const best = lows.reduce((a, b) => (b.v < a.v ? b : a));
-    card.price = best.v;
-    card.foilOnly = best.foil;
+    if (typeof p.low !== "number" && typeof p.lowFoil !== "number") return;
+    if (typeof p.low === "number") card.priceEur = p.low;
+    if (typeof p.lowFoil === "number") card.priceFoil = p.lowFoil;
     card.trend = typeof p.trend === "number" ? p.trend : null;
     card.isCm = true;
-    const el = cardEls.get(card.id);
-    if (el) el.querySelector(".price-line").innerHTML = priceHtml(card);
+    finalizePrice(card);
+    const el = cardEls.get(uidOf(card));
+    if (el) el.refreshPrice();
   }
 
   // ===== Laden: Collection =====
@@ -836,33 +1232,41 @@ Counterspell
 
   async function loadCollectionCards(col, token) {
     const have = [];
-    const missing = [];
+    const missingByCard = new Map(); // scryfallId -> [Einträge] (Foil + Normal je Druck)
     for (const entry of col.entries) {
       const cached = cardCache[entry.id];
-      if (cached) have.push({ ...cached, qty: entry.qty });
-      else missing.push(entry);
+      if (cached) have.push({ ...cached, qty: entry.qty, foil: !!entry.foil });
+      else {
+        if (!missingByCard.has(entry.id)) missingByCard.set(entry.id, []);
+        missingByCard.get(entry.id).push(entry);
+      }
     }
     setProgress(have.length, col.entries.length);
     if (have.length) addBatch(have, token);
-    for (let i = 0; i < missing.length; i += 75) {
-      const slice = missing.slice(i, i + 75);
+    const missingIds = [...missingByCard.keys()];
+    let loaded = have.length;
+    for (let i = 0; i < missingIds.length; i += 75) {
+      const slice = missingIds.slice(i, i + 75);
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+        body: JSON.stringify({ identifiers: slice.map(id => ({ id: id })) })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
       if (token !== loadToken) return;
-      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
-      const batch = json.data.map(c => {
+      const batch = [];
+      for (const c of json.data) {
         const s = simplify(c);
         cardCache[c.id] = s;
-        return { ...s, qty: qtyById.get(c.id) || 1 };
-      });
+        for (const entry of missingByCard.get(c.id) || []) {
+          batch.push({ ...s, qty: entry.qty, foil: !!entry.foil });
+          loaded++;
+        }
+      }
       saveCardCache();
       addBatch(batch, token);
-      setProgress(Math.min(have.length + i + 75, col.entries.length), col.entries.length);
+      setProgress(Math.min(loaded, col.entries.length), col.entries.length);
     }
   }
 
@@ -870,29 +1274,34 @@ Counterspell
   // und gibt sie gesammelt zurück – für den Vergleich zweier Collections.
   async function getCollectionCards(col) {
     const out = [];
-    const missing = [];
+    const missingByCard = new Map(); // scryfallId -> [Einträge]
     for (const entry of col.entries) {
       const cached = cardCache[entry.id];
-      if (cached) out.push({ ...cached, qty: entry.qty });
-      else missing.push(entry);
+      if (cached) out.push({ ...cached, qty: entry.qty, foil: !!entry.foil });
+      else {
+        if (!missingByCard.has(entry.id)) missingByCard.set(entry.id, []);
+        missingByCard.get(entry.id).push(entry);
+      }
     }
-    for (let i = 0; i < missing.length; i += 75) {
-      const slice = missing.slice(i, i + 75);
+    const missingIds = [...missingByCard.keys()];
+    for (let i = 0; i < missingIds.length; i += 75) {
+      const slice = missingIds.slice(i, i + 75);
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: slice.map(e => ({ id: e.id })) })
+        body: JSON.stringify({ identifiers: slice.map(id => ({ id: id })) })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
-      const qtyById = new Map(slice.map(e => [e.id, e.qty]));
       for (const c of json.data) {
         const s = simplify(c);
         cardCache[c.id] = s;
-        out.push({ ...s, qty: qtyById.get(c.id) || 1 });
+        for (const entry of missingByCard.get(c.id) || []) {
+          out.push({ ...s, qty: entry.qty, foil: !!entry.foil });
+        }
       }
     }
-    if (missing.length) saveCardCache();
+    if (missingIds.length) saveCardCache();
     return out;
   }
 
@@ -947,19 +1356,24 @@ Counterspell
 
   function adoptSharedCollection() {
     if (!sharedView) return;
-    const entryById = new Map();
+    const entryByKey = new Map();
     for (const f of sharedView.found) {
       cardCache[f.card.id] = f.card;
-      const existing = entryById.get(f.card.id);
+      const k = f.card.id + (f.foil ? ":f" : "");
+      const existing = entryByKey.get(k);
       if (existing) existing.qty += f.qty;
-      else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+      else {
+        const entry = { id: f.card.id, qty: f.qty };
+        if (f.foil) entry.foil = true;
+        entryByKey.set(k, entry);
+      }
     }
     saveCardCache();
     const col = {
       id: "c" + Date.now().toString(36),
       name: sharedView.name,
       createdAt: new Date().toISOString(),
-      entries: [...entryById.values()]
+      entries: [...entryByKey.values()]
     };
     collections.push(col);
     saveCollections();
@@ -1016,10 +1430,10 @@ Counterspell
     if (!liveStore || !liveStore.shares[col.id]) return;
     const colCards = await getCollectionCards(col);
     const payload = {
-      v: 1,
+      v: 2, // v2: viertes Element = Foil-Flag
       name: col.name,
       updatedAt: new Date().toISOString(),
-      cards: colCards.map(c => [c.set, c.number, c.qty || 1])
+      cards: colCards.map(c => [c.set, c.number, c.qty || 1, c.foil ? 1 : 0])
     };
     const res = await fetch(KVDB_URL + "/" + liveStore.bucket + "/" + liveStore.shares[col.id], {
       method: "PUT",
@@ -1104,7 +1518,8 @@ Counterspell
       const entries = (payload.cards || []).map(c => ({
         qty: parseInt(c[2], 10) || 1,
         ident: { set: String(c[0]), collector_number: String(c[1]) },
-        raw: c[0] + " " + c[1]
+        raw: c[0] + " " + c[1],
+        foil: !!(c[3] && parseInt(c[3], 10))
       }));
       if (!entries.length) throw new Error("Die geteilte Collection ist leer");
       const { found } = await resolveEntries(entries, t => { progressText.textContent = t; });
@@ -1116,7 +1531,7 @@ Counterspell
         "Live geteilt: „" + sharedView.name + "“ (" + found.length + " Karten" +
         (stand ? " · Stand " + stand : "") + ")";
       shareBar.hidden = false;
-      addBatch(found.map(f => ({ ...f.card, qty: f.qty })), token);
+      addBatch(found.map(f => ({ ...f.card, qty: f.qty, foil: !!f.foil })), token);
       progress.hidden = true;
       return true;
     } catch (e) {
@@ -1143,7 +1558,7 @@ Counterspell
       if (c.id === a.id) continue;
       const opt = document.createElement("option");
       opt.value = c.id;
-      opt.textContent = c.name + " (" + c.entries.length + " Karten)";
+      opt.textContent = c.name + " (" + countCards(c.entries) + " Karten)";
       sel.appendChild(opt);
     }
     document.getElementById("compare-hint").textContent =
@@ -1183,6 +1598,7 @@ Counterspell
       }
       const list = [...byName.values()].map(e => ({
         ...e.card,
+        foil: false, // im Vergleich zählen alle Varianten eines Namens zusammen
         qty: e.qtyA + e.qtyB,
         compare: {
           a: e.qtyA,
@@ -1249,7 +1665,7 @@ Counterspell
     for (const col of collections) {
       const opt = document.createElement("option");
       opt.value = col.id;
-      opt.textContent = col.name + " (" + col.entries.length + " Karten)";
+      opt.textContent = col.name + " (" + countCards(col.entries) + " Karten)";
       colSelect.appendChild(opt);
     }
     colSelect.value = activeId || "";
@@ -1267,6 +1683,7 @@ Counterspell
   function switchCollection(id) {
     exitCompareUi();
     exitShareUi();
+    closeCardDetail(); // Detail einer anderen Collection wäre veraltet
     activeId = id;
     if (id) localStorage.setItem(ACTIVE_KEY, id);
     else localStorage.removeItem(ACTIVE_KEY);
@@ -1279,17 +1696,17 @@ Counterspell
     const col = currentCollection();
     if (!col) {
       progress.hidden = true;
-      emptyNote.innerHTML = 'Noch keine Collection vorhanden. ' +
-        '<br><br><button class="bar-btn primary" id="empty-cta">+ Neue Collection anlegen</button>';
-      document.getElementById("empty-cta").addEventListener("click", () => openModal("create"));
+      // Kein eigener CTA-Button: „+ Neu“ in der Collection-Leiste direkt
+      // darüber ist die eine Stelle zum Anlegen.
+      emptyNote.textContent = "Noch keine Collection vorhanden – oben mit „+ Neu“ anlegen.";
       emptyNote.hidden = false;
-      updateStatus(0, 0);
+      applyFilters();
       return;
     }
     emptyNote.textContent = "Keine Karten gefunden – Filter anpassen.";
     emptyNote.hidden = true;
     showProgress();
-    updateStatus(0, 0);
+    applyFilters();
     loadCollectionCards(col, token)
       .then(() => { if (token === loadToken) progress.hidden = true; })
       .catch(err => {
@@ -1355,8 +1772,10 @@ Counterspell
         const entries = [];
         for (const item of data.cards) {
           if (!item.card || !item.card.id) continue;
-          cardCache[item.card.id] = item.card;
-          entries.push({ id: item.card.id, qty: item.qty || 1 });
+          cardCache[item.card.id] = { ...item.card, qty: undefined, foil: undefined };
+          const entry = { id: item.card.id, qty: item.qty || 1 };
+          if (item.card.foil) entry.foil = true;
+          entries.push(entry);
         }
         if (!entries.length) throw new Error("Die Datei enthält keine Karten");
         saveCardCache();
@@ -1384,13 +1803,18 @@ Counterspell
       .trim();
   }
 
+  // Foil-Markierung am Ende: *F* (F) [F]
+  function hasFoilMarker(s) {
+    return /[*([]F[*)\]]\s*$/i.test(s.trim());
+  }
+
   function parseList(text, setHint) {
-    const merged = new Map(); // key -> {qty, ident, raw}
+    const merged = new Map(); // key -> {qty, ident, raw, foil}
     const errors = [];
-    function add(key, qty, ident, raw) {
+    function add(key, qty, ident, raw, foil) {
       const existing = merged.get(key);
       if (existing) existing.qty += qty;
-      else merged.set(key, { qty, ident, raw });
+      else merged.set(key, { qty, ident, raw, foil: !!foil });
     }
     for (const rawLine of text.split("\n")) {
       let line = rawLine.trim();
@@ -1398,23 +1822,29 @@ Counterspell
       line = line.replace(/^[-*]\s*\[[ xX]\]\s*/, "").replace(/^[-*]\s+/, "").trim();
       if (!line) continue;
       let m;
-      // Arena/Moxfield: "1 Name (SET) 123" (Sammlernummer optional)
-      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([A-Za-z0-9★†-]+)\s*.*$/))) {
+      // Arena/Moxfield: "1 Name (SET) 123" (Sammlernummer optional, "*F*" = Foil)
+      if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([A-Za-z0-9★†-]+)\s*(.*)$/))) {
         const set = m[3].toLowerCase();
-        add("n:" + set + ":" + m[4], parseInt(m[1], 10), { set: set, collector_number: m[4] }, rawLine);
+        const foil = hasFoilMarker(m[5]);
+        add("n:" + set + ":" + m[4] + (foil ? ":f" : ""), parseInt(m[1], 10),
+          { set: set, collector_number: m[4] }, rawLine, foil);
         continue;
       }
       if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s*$/))) {
         const set = m[3].toLowerCase();
+        const foil = hasFoilMarker(m[2]);
         const name = cleanName(m[2]);
-        add("m:" + normName(name) + "|" + set, parseInt(m[1], 10), { name: name, set: set }, rawLine);
+        add("m:" + normName(name) + "|" + set + (foil ? ":f" : ""), parseInt(m[1], 10),
+          { name: name, set: set }, rawLine, foil);
         continue;
       }
       // Set-Liste mit Sammlernummer: "0017 Name ..." (Set-Code nötig)
       if ((m = line.match(/^(\d{1,4})\s+(.+)$/)) && (m[1].length >= 3 || m[1][0] === "0")) {
         if (setHint) {
           const num = String(parseInt(m[1], 10));
-          add("n:" + setHint + ":" + num, 1, { set: setHint, collector_number: num }, rawLine);
+          const foil = hasFoilMarker(m[2]);
+          add("n:" + setHint + ":" + num + (foil ? ":f" : ""), 1,
+            { set: setHint, collector_number: num }, rawLine, foil);
         } else {
           errors.push(rawLine + "   → Sammlernummer erkannt, aber kein Set-Code angegeben");
         }
@@ -1422,13 +1852,15 @@ Counterspell
       }
       // "4x Name" / "4 Name"
       if ((m = line.match(/^(\d{1,3})[xX]?\s+(.+)$/))) {
+        const foil = hasFoilMarker(m[2]);
         const name = cleanName(m[2]);
-        add("m:" + normName(name), parseInt(m[1], 10), { name: name }, rawLine);
+        add("m:" + normName(name) + (foil ? ":f" : ""), parseInt(m[1], 10), { name: name }, rawLine, foil);
         continue;
       }
       // Nur der Kartenname
+      const foil = hasFoilMarker(line);
       const name = cleanName(line);
-      if (name) add("m:" + normName(name), 1, { name: name }, rawLine);
+      if (name) add("m:" + normName(name) + (foil ? ":f" : ""), 1, { name: name }, rawLine, foil);
     }
     return { entries: [...merged.values()], errors };
   }
@@ -1442,44 +1874,41 @@ Counterspell
     for (let i = 0; i < entries.length; i += 75) {
       const batch = entries.slice(i, i + 75);
       onStatus("Löse Karten auf … " + Math.min(i + 75, entries.length) + " / " + entries.length);
+      // Foil- und Normal-Exemplare desselben Drucks teilen sich einen Identifier
+      const identSeen = new Set();
+      const idents = [];
+      for (const e of batch) {
+        const k = JSON.stringify(e.ident);
+        if (!identSeen.has(k)) { identSeen.add(k); idents.push(e.ident); }
+      }
       const res = await fetch(COLLECTION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: batch.map(e => e.ident) })
+        body: JSON.stringify({ identifiers: idents })
       });
       if (!res.ok) throw new Error("Scryfall antwortet mit Status " + res.status);
       const json = await res.json();
 
+      // Gefundene Karten indexieren, dann jeden Eintrag seiner Karte zuordnen
       const bySetNum = new Map();
       const byName = new Map();
+      for (const card of json.data) {
+        bySetNum.set(card.set + ":" + card.collector_number.toLowerCase(), card);
+        for (const n of [normName(card.name), normName(card.name.split(" // ")[0])]) {
+          byName.set(n + "|" + card.set, card);
+          if (!byName.has(n)) byName.set(n, card);
+        }
+      }
       for (const e of batch) {
+        let card = null;
         if (e.ident.collector_number) {
-          bySetNum.set(e.ident.set + ":" + e.ident.collector_number.toLowerCase(), e);
+          card = bySetNum.get(e.ident.set + ":" + e.ident.collector_number.toLowerCase());
         } else {
           const n = normName(e.ident.name);
-          if (e.ident.set) byName.set(n + "|" + e.ident.set, e);
-          byName.set(n, e);
+          card = (e.ident.set && byName.get(n + "|" + e.ident.set)) || byName.get(n);
         }
-      }
-      const matched = new Set();
-      for (const card of json.data) {
-        let e = bySetNum.get(card.set + ":" + card.collector_number.toLowerCase());
-        if (!e || matched.has(e)) {
-          e = null;
-          const names = [normName(card.name), normName(card.name.split(" // ")[0])];
-          for (const n of names) {
-            const cand = byName.get(n + "|" + card.set) || byName.get(n);
-            if (cand && !matched.has(cand)) { e = cand; break; }
-          }
-        }
-        if (e && !matched.has(e)) {
-          matched.add(e);
-          found.push({ card: simplify(card), qty: e.qty });
-        }
-      }
-      for (const e of batch) {
-        if (matched.has(e)) continue;
-        if (e.ident.name) fuzzyQueue.push(e);
+        if (card) found.push({ card: simplify(card), qty: e.qty, foil: !!e.foil });
+        else if (e.ident.name) fuzzyQueue.push(e);
         else unresolved.push(e.raw);
       }
     }
@@ -1488,7 +1917,7 @@ Counterspell
       onStatus("Unscharfe Suche: " + e.ident.name + " …");
       try {
         const res = await fetch(FUZZY_API + encodeURIComponent(e.ident.name));
-        if (res.ok) found.push({ card: simplify(await res.json()), qty: e.qty });
+        if (res.ok) found.push({ card: simplify(await res.json()), qty: e.qty, foil: !!e.foil });
         else unresolved.push(e.raw);
       } catch (err) { unresolved.push(e.raw); }
       await new Promise(r => setTimeout(r, 120)); // API schonen
@@ -1545,15 +1974,17 @@ Counterspell
       let col;
       if (isAdd) {
         col = currentCollection();
-        const byId = new Map(col.entries.map(e => [e.id, e]));
+        const byKey = new Map(col.entries.map(e => [uidOf(e), e]));
         for (const f of found) {
           cardCache[f.card.id] = f.card;
-          const existing = byId.get(f.card.id);
+          const k = f.card.id + (f.foil ? ":f" : "");
+          const existing = byKey.get(k);
           if (existing) existing.qty += f.qty;
           else {
             const entry = { id: f.card.id, qty: f.qty };
+            if (f.foil) entry.foil = true;
             col.entries.push(entry);
-            byId.set(f.card.id, entry);
+            byKey.set(k, entry);
           }
         }
         saveCardCache();
@@ -1561,20 +1992,25 @@ Counterspell
         switchCollection(col.id); // Ansicht mit neuen Karten neu aufbauen
         syncLiveShare(col);
       } else {
-        // Duplikate (gleiche Karte über mehrere Zeilen) zusammenführen
-        const entryById = new Map();
+        // Duplikate (gleiches Exemplar über mehrere Zeilen) zusammenführen
+        const entryByKey = new Map();
         for (const f of found) {
           cardCache[f.card.id] = f.card;
-          const existing = entryById.get(f.card.id);
+          const k = f.card.id + (f.foil ? ":f" : "");
+          const existing = entryByKey.get(k);
           if (existing) existing.qty += f.qty;
-          else entryById.set(f.card.id, { id: f.card.id, qty: f.qty });
+          else {
+            const entry = { id: f.card.id, qty: f.qty };
+            if (f.foil) entry.foil = true;
+            entryByKey.set(k, entry);
+          }
         }
         saveCardCache();
         col = {
           id: "c" + Date.now().toString(36),
           name: name,
           createdAt: new Date().toISOString(),
-          entries: [...entryById.values()]
+          entries: [...entryByKey.values()]
         };
         collections.push(col);
         saveCollections();
@@ -1583,8 +2019,9 @@ Counterspell
 
       const problems = unresolved.concat(errors);
       if (problems.length) {
-        colStatus.innerHTML = '<span class="ok">' + found.length +
-          ' Karten übernommen.</span>\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
+        colStatus.innerHTML = '<span class="ok">' + found.reduce((s, f) => s + f.qty, 0) +
+          ' Karten (' + found.length + ' verschiedene Drucke) übernommen.</span>' +
+          '\n<span class="warn">Nicht zugeordnet (' + problems.length + " Zeilen):</span>\n" +
           problems.join("\n");
         createBtn.disabled = false;
       } else {
@@ -1603,7 +2040,7 @@ Counterspell
       html = '<span class="price unknown">kein Preis verfügbar</span>';
     } else {
       const prefix = card.isCm ? "ab " : "";
-      const foil = card.foilOnly ? " <small>(Foil)</small>" : "";
+      const foil = card.priceIsFoil ? " <small>(Foil)</small>" : "";
       const trend = card.trend !== null
         ? " <small>· Trend " + formatEur(card.trend) + "</small>"
         : "";
@@ -1616,52 +2053,180 @@ Counterspell
     return html;
   }
 
-  function buildCardEl(card) {
-    const el = document.createElement("div");
-    el.className = "card";
-    el.innerHTML =
-      '<a class="img-link" href="' + card.url + '" target="_blank" rel="noopener" title="' +
-        card.name.replace(/"/g, "&quot;") + '">' +
-        '<img loading="lazy" decoding="async"' +
-        ' src="' + card.image + '"' +
-        (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
-        ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
-      "</a>" +
-      (card.compare
-        ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
-        : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
-      '<div class="info">' +
-        '<div class="name-row">' +
-          '<div class="name">' + card.name + "</div>" +
-          '<button class="fav-btn' + (favorites.has(card.id) ? " faved" : "") +
-            '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
-            favorites.has(card.id) + '">' +
-            (favorites.has(card.id) ? "★" : "☆") +
-          "</button>" +
-        "</div>" +
-        '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
-          ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
-          (RARITY_NAME[card.rarity] || card.rarity) + "</span></div>" +
-        '<div class="price-line">' + priceHtml(card) + "</div>" +
+  // ===== Detail-Ansicht (Panel auf Desktop, Bottom-Sheet mobil) =====
+  function renderCardDetail(card) {
+    const d = document.getElementById("card-detail");
+    const faved = favorites.has(uidOf(card));
+    const eur = card.priceEur !== undefined ? card.priceEur : (card.foilOnly ? null : card.price);
+    const foilP = card.priceFoil !== undefined ? card.priceFoil : (card.foilOnly ? card.price : null);
+    const priceRow = (label, v) => (v !== null && v !== undefined)
+      ? '<div><span class="lbl">' + label + ':</span> ' + formatEur(v) + "</div>" : "";
+    d.innerHTML =
+      '<img class="detail-img" src="' + card.image + '" alt="' + escapeHtml(card.name) + '">' +
+      '<div class="detail-head"><h3>' + escapeHtml(card.name) + "</h3>" +
+        '<button class="fav-btn' + (faved ? " faved" : "") + '" aria-pressed="' + faved +
+          '" aria-label="Als Favorit markieren">' + (faved ? "★" : "☆") + "</button></div>" +
+      '<div class="detail-meta">' + card.set.toUpperCase() + " #" + card.number +
+        ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+        (RARITY_NAME[card.rarity] || card.rarity) + "</span>" +
+        (card.foil ? ' · <span class="foil">Foil</span>' : "") +
+        ((card.qty || 1) > 1 ? " · " + card.qty + "× im Besitz" : "") + "</div>" +
+      (card.typeLine ? '<div class="detail-type">' + escapeHtml(card.typeLine) + "</div>" : "") +
+      (card.oracle ? '<div class="detail-oracle">' + escapeHtml(card.oracle).replace(/\n/g, "<br>") + "</div>" : "") +
+      (card.flavor ? '<div class="detail-flavor">' + escapeHtml(card.flavor).replace(/\n/g, "<br>") + "</div>" : "") +
+      '<div class="detail-prices">' +
+        (card.price !== null
+          ? '<div class="now">' + (card.isCm ? "ab " : "") + formatEur(card.price) +
+            (card.priceIsFoil ? " <small>(Foil)</small>" : "") + "</div>"
+          : '<div class="now unknown">kein Preis verfügbar</div>') +
+        priceRow("Normal", eur) + priceRow("Foil", foilP) + priceRow("Trend", card.trend) +
+      "</div>" +
+      '<div class="detail-links">' +
+        '<a class="btn" href="' + card.url + '" target="_blank" rel="noopener">Scryfall ↗</a>' +
+        (card.cmUrl ? '<a class="btn" href="' + card.cmUrl + '" target="_blank" rel="noopener">Cardmarket ↗</a>' : "") +
       "</div>";
-    el.querySelector(".fav-btn").addEventListener("click", e => {
-      const btn = e.currentTarget;
-      if (favorites.has(card.id)) {
-        favorites.delete(card.id);
+    document.getElementById("detail-sheet-title").textContent = card.name;
+    d.querySelector(".fav-btn").addEventListener("click", () => {
+      const el = cardEls.get(uidOf(card));
+      if (el) el.toggleFav(); // hält Kachel + Favoriten-Set synchron
+      renderCardDetail(card);
+    });
+  }
+
+  // ---- Komponente: eine einzelne Kartenkachel ----
+  // Das Element ist selbst die Grid-Kachel (Klasse "card"), kapselt sein
+  // Rendering und die Favoriten-Interaktion und bietet kleine Methoden,
+  // mit denen der Controller Preis, Sichtbarkeit und Reihenfolge steuert,
+  // ohne die <img>-Elemente neu zu erzeugen.
+  class MtgCard extends HTMLElement {
+    set card(data) { this._card = data; if (this.isConnected) this.render(); }
+    get card() { return this._card; }
+
+    connectedCallback() {
+      if (!this._rendered) this.render();
+    }
+
+    render() {
+      const card = this._card;
+      if (!card) return;
+      const faved = favorites.has(uidOf(card));
+      this.classList.add("card");
+      // Klick irgendwo auf der Kachel (außer Stern/Links) öffnet die Details;
+      // fürs Keyboard ist der Bildbereich ein echter <button> (nichts
+      // Interaktives darf darin verschachtelt sein).
+      if (!this._wired) {
+        this._wired = true;
+        this.addEventListener("click", e => {
+          if (e.target.closest(".fav-btn, .cm-link, a")) return;
+          this.dispatchEvent(new CustomEvent("card-open", { bubbles: true, detail: this._card }));
+        });
+      }
+      this.innerHTML =
+        '<button class="img-link" aria-label="Details zu ' + card.name.replace(/"/g, "&quot;") + '">' +
+          '<img loading="lazy" decoding="async"' +
+          ' src="' + card.image + '"' +
+          (card.imageSmall ? ' srcset="' + card.imageSmall + ' 146w, ' + card.image + ' 488w" sizes="(max-width: 600px) 45vw, 240px"' : "") +
+          ' alt="' + card.name.replace(/"/g, "&quot;") + '">' +
+        "</button>" +
+        (card.compare
+          ? '<div class="cmp-badge ' + card.compare.state + '">' + cmpBadgeLabel(card.compare) + "</div>"
+          : (card.qty > 1 ? '<div class="qty-badge">' + card.qty + "×</div>" : "")) +
+        '<div class="info">' +
+          '<div class="name-row">' +
+            '<div class="name">' + card.name + "</div>" +
+            '<button class="fav-btn' + (faved ? " faved" : "") +
+              '" title="Als Favorit markieren" aria-label="Als Favorit markieren" aria-pressed="' +
+              faved + '">' +
+              (faved ? "★" : "☆") +
+            "</button>" +
+          "</div>" +
+          '<div class="meta">' + card.set.toUpperCase() + " #" + card.number +
+            ' · <span class="rarity-' + (RARITY_LABEL[card.rarity] || "C") + '">' +
+            (RARITY_NAME[card.rarity] || card.rarity) + "</span>" +
+            (card.foil ? ' · <span class="foil">Foil</span>' : "") + "</div>" +
+          '<div class="price-line">' + priceHtml(card) + "</div>" +
+        "</div>";
+      this.querySelector(".fav-btn").addEventListener("click", () => this.toggleFav());
+      this._rendered = true;
+    }
+
+    toggleFav() {
+      const uid = uidOf(this._card);
+      const btn = this.querySelector(".fav-btn");
+      if (favorites.has(uid)) {
+        favorites.delete(uid);
         btn.classList.remove("faved");
         btn.textContent = "☆";
         btn.setAttribute("aria-pressed", "false");
       } else {
-        favorites.add(card.id);
+        favorites.add(uid);
         btn.classList.add("faved");
         btn.textContent = "★";
         btn.setAttribute("aria-pressed", "true");
       }
       saveFavorites();
       applyFilters();
-    });
+    }
+
+    refreshPrice() {
+      const line = this.querySelector(".price-line");
+      if (line) line.innerHTML = priceHtml(this._card);
+    }
+
+    // Mengen-Badge überschreiben (Gruppierung) bzw. mit null zurücksetzen
+    updateQtyBadge(text) {
+      const card = this._card;
+      if (!card || card.compare) return;
+      const def = (card.qty || 1) > 1 ? card.qty + "×" : "";
+      const t = text != null ? text : def;
+      let badge = this.querySelector(".qty-badge");
+      if (!t) { if (badge) badge.remove(); return; }
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "qty-badge";
+        this.querySelector(".img-link").after(badge);
+      }
+      badge.textContent = t;
+    }
+
+    setFiltered(hidden) { this.classList.toggle("filtered-out", hidden); }
+    setOrder(n) { this.style.order = n; }
+  }
+  customElements.define("mtg-card", MtgCard);
+
+  function buildCardEl(card) {
+    const el = document.createElement("mtg-card");
+    el.card = card;
     return el;
   }
+
+  // ---- Komponente: Zeile mit aktiven Filter-Chips ----
+  // Bekommt vom Controller die Chip-Liste; jeder Chip entfernt beim Tippen
+  // seinen Filter. Versteckt sich selbst, wenn keine Filter aktiv sind.
+  class MtgFilterChips extends HTMLElement {
+    connectedCallback() { this.classList.add("chips-row"); }
+
+    render(chips, onClearAll) {
+      this.replaceChildren();
+      this.hidden = chips.length === 0;
+      for (const chip of chips) {
+        const btn = document.createElement("button");
+        btn.className = "chip";
+        btn.innerHTML = escapeHtml(chip.label) + ' <span class="x" aria-hidden="true">✕</span>';
+        btn.setAttribute("aria-label", "Filter entfernen: " + chip.label);
+        btn.addEventListener("click", chip.remove);
+        this.appendChild(btn);
+      }
+      if (chips.length) {
+        const clear = document.createElement("button");
+        clear.className = "chip clear";
+        clear.textContent = "Alle löschen";
+        clear.addEventListener("click", onClearAll);
+        this.appendChild(clear);
+      }
+    }
+  }
+  customElements.define("mtg-filter-chips", MtgFilterChips);
 
   function matchesColorFilter(card) {
     if (filters.colors.size === 0) return true;
@@ -1679,7 +2244,7 @@ Counterspell
     if (compareMode && filters.compareFilter !== "all" &&
         card.compare && card.compare.state !== filters.compareFilter) return false;
     if (!matchesColorFilter(card)) return false;
-    if (filters.favsOnly && !favorites.has(card.id)) return false;
+    if (filters.favsOnly && !favorites.has(uidOf(card))) return false;
     if (filters.search && !searchTextOf(card).includes(filters.search)) return false;
     if (filters.priceMin !== null && (card.price === null || card.price < filters.priceMin)) return false;
     if (filters.priceMax !== null && (card.price === null || card.price > filters.priceMax)) return false;
@@ -1705,8 +2270,8 @@ Counterspell
     return list;
   }
 
-  function updateStatus(visibleCount, totalValue) {
-    let text = visibleCount + " von " + cards.length + " Karten";
+  function updateStatus(visibleQty, totalQty, totalValue) {
+    let text = visibleQty + " von " + totalQty + " Karten";
     if (totalValue > 0 && !compareMode) text += " · Wert: " + formatEur(totalValue);
     text += " · " + favorites.size + " Favoriten";
     if (cmInfo) {
@@ -1720,23 +2285,47 @@ Counterspell
   // Sichtbarkeit & Reihenfolge per CSS steuern statt das DOM neu zu bauen –
   // so werden die <img>-Elemente nie neu erzeugt.
   function applyFilters() {
-    let visible = 0;
+    // Im Vergleichsmodus sind die Drucke bereits über den Namen gebündelt
+    const grouping = groupPrints && !compareMode;
+    let visibleTiles = 0;
     let value = 0;
+    let visibleQty = 0;
+    let totalQty = 0;
+    const groups = new Map(); // normName -> { el: Repräsentant, qty, prints }
     for (const [i, card] of sortedCards().entries()) {
-      const el = cardEls.get(card.id);
+      const el = cardEls.get(uidOf(card));
       if (!el) continue;
-      const show = matchesFilters(card);
-      el.classList.toggle("filtered-out", !show);
-      el.style.order = i;
-      if (show) {
-        visible++;
-        if (card.price !== null) value += card.price * (card.qty || 1);
+      const qty = card.qty || 1;
+      totalQty += qty;
+      const pass = matchesFilters(card);
+      let show = pass;
+      if (pass) {
+        visibleQty += qty;
+        if (card.price !== null) value += card.price * qty;
+        if (grouping) {
+          const key = normName(card.name);
+          const g = groups.get(key);
+          // Erster passender Druck (in Sortierreihenfolge) vertritt die Gruppe
+          if (g) { g.qty += qty; g.prints++; show = false; }
+          else groups.set(key, { el: el, qty: qty, prints: 1 });
+        }
       }
+      el.setFiltered(!show);
+      el.setOrder(i);
+      if (show) visibleTiles++;
+    }
+    if (grouping) {
+      for (const g of groups.values()) {
+        g.el.updateQtyBadge(g.prints > 1 ? g.qty + "× · " + g.prints + " Prints" : null);
+      }
+    } else {
+      for (const el of cardEls.values()) el.updateQtyBadge(null);
     }
     // Ohne Collection bleibt der Hinweis mit CTA sichtbar
-    emptyNote.hidden = visible > 0 || (cards.length === 0 && !!currentCollection());
-    updateStatus(visible, value);
-    updateFilterToggle();
+    emptyNote.hidden = visibleTiles > 0 || (cards.length === 0 && !!currentCollection());
+    updateStatus(visibleQty, totalQty, value);
+    updateFilterSummary(visibleQty, totalQty);
+    renderFilterChips();
   }
 
   function activeFilterCount() {
@@ -1748,22 +2337,62 @@ Counterspell
       (filters.sort !== "number" ? 1 : 0);
   }
 
-  function updateFilterToggle() {
-    const open = !controlsEl.classList.contains("collapsed");
+  // Zähler auf Filter-Leiste und Sheet-Button aktuell halten
+  function updateFilterSummary(visibleQty, totalQty) {
     const n = activeFilterCount();
-    filterToggle.textContent = (open ? "Filter ausblenden ▴" : "Filter & Suche ▾") +
-      (n ? " (" + n + " aktiv)" : "");
+    document.getElementById("filter-toggle-label").textContent =
+      "⚙ Filter & Sortieren" + (n ? " (" + n + ")" : "");
+    document.getElementById("filter-toggle-count").textContent =
+      totalQty ? visibleQty + " / " + totalQty + " Karten" : "";
+    document.getElementById("filter-sheet-apply").textContent =
+      "Zeige " + visibleQty + " Karten";
+  }
+
+  // Aktive Filter als entfernbare Chips (mobil; Desktop zeigt die Sidebar)
+  const COLOR_NAME = { W: "Weiß", U: "Blau", B: "Schwarz", R: "Rot", G: "Grün", M: "Mehrfarbig", C: "Farblos" };
+  const SORT_CHIP = { "price-desc": "Preis absteigend", "price-asc": "Preis aufsteigend", "name": "Name A–Z" };
+  function renderFilterChips() {
+    const chips = [];
+    for (const c of filters.colors) {
+      chips.push({
+        label: COLOR_NAME[c] || c,
+        remove: () => document.querySelector('.color-btn[data-color="' + c + '"]').click()
+      });
+    }
+    if (filters.priceMin !== null) chips.push({
+      label: "ab " + formatEur(filters.priceMin),
+      remove: () => { filters.priceMin = null; document.getElementById("price-min").value = ""; applyFilters(); }
+    });
+    if (filters.priceMax !== null) chips.push({
+      label: "bis " + formatEur(filters.priceMax),
+      remove: () => { filters.priceMax = null; document.getElementById("price-max").value = ""; applyFilters(); }
+    });
+    if (filters.search) chips.push({
+      label: "„" + filters.search + "“",
+      remove: () => { filters.search = ""; document.getElementById("search").value = ""; applyFilters(); }
+    });
+    if (filters.favsOnly) chips.push({
+      label: "★ Favoriten",
+      remove: () => document.getElementById("fav-filter").click()
+    });
+    if (filters.sort !== "number") chips.push({
+      label: SORT_CHIP[filters.sort] || filters.sort,
+      remove: () => { filters.sort = "number"; document.getElementById("sort").value = "number"; applyFilters(); }
+    });
+    document.querySelector("mtg-filter-chips").render(chips, resetFilters);
   }
 
   function addBatch(batch, token) {
     if (token !== loadToken) return;
     const frag = document.createDocumentFragment();
     for (const card of batch) {
-      if (cardEls.has(card.id)) continue;
+      const uid = uidOf(card);
+      if (cardEls.has(uid)) continue;
       cards.push(card);
+      finalizePrice(card);
       if (pendingCmPrices) applyCardmarketPrice(card, pendingCmPrices);
       const el = buildCardEl(card);
-      cardEls.set(card.id, el);
+      cardEls.set(uid, el);
       frag.appendChild(el);
     }
     grid.appendChild(frag);
@@ -1771,14 +2400,61 @@ Counterspell
   }
 
   // ===== Steuerelemente verdrahten =====
-  const controlsEl = document.getElementById("controls");
-  const filterToggle = document.getElementById("filter-toggle");
-  if (localStorage.getItem(FILTERS_OPEN_KEY) === "1") controlsEl.classList.remove("collapsed");
-  filterToggle.addEventListener("click", () => {
-    const collapsed = controlsEl.classList.toggle("collapsed");
-    localStorage.setItem(FILTERS_OPEN_KEY, collapsed ? "0" : "1");
-    updateFilterToggle();
-  });
+  // Responsive Platzierung: die Filter-Gruppen wandern zwischen Sidebar
+  // (Desktop) und Bottom-Sheet (mobil). Es sind dieselben DOM-Elemente,
+  // alle Event-Listener bleiben dabei erhalten.
+  const filterPanel = document.getElementById("controls");
+  const filterGroupsEl = document.querySelector(".filter-groups");
+  const filterSheet = document.getElementById("filter-sheet");
+  const filterSheetBody = document.getElementById("filter-sheet-body");
+  const desktopLayout = matchMedia("(min-width: 1024px)");
+  function placeFilterGroups() {
+    if (desktopLayout.matches) {
+      if (filterSheet.open) filterSheet.close();
+      if (filterGroupsEl.parentElement !== filterPanel) filterPanel.appendChild(filterGroupsEl);
+    } else if (filterGroupsEl.parentElement !== filterSheetBody) {
+      filterSheetBody.appendChild(filterGroupsEl);
+    }
+  }
+  desktopLayout.addEventListener("change", placeFilterGroups);
+  placeFilterGroups();
+  localStorage.removeItem("mtg-filters-open-v1"); // obsolet seit Sidebar/Sheet
+
+  document.getElementById("filter-toggle").addEventListener("click", () => filterSheet.showModal());
+  document.getElementById("filter-sheet-close").addEventListener("click", () => filterSheet.close());
+  document.getElementById("filter-sheet-apply").addEventListener("click", () => filterSheet.close());
+  // Tipp auf den Scrim schließt das Sheet (Klickziel ist dann der <dialog> selbst)
+  filterSheet.addEventListener("click", e => { if (e.target === filterSheet) filterSheet.close(); });
+
+  // Detail-Ansicht: gleiche Wander-Logik wie die Filter-Gruppen
+  const detailPanel = document.getElementById("detail-panel");
+  const detailSheet = document.getElementById("detail-sheet");
+  const detailSheetBody = document.getElementById("detail-sheet-body");
+  const cardDetailEl = document.getElementById("card-detail");
+  function placeCardDetail() {
+    if (desktopLayout.matches) {
+      if (detailSheet.open) detailSheet.close();
+      if (cardDetailEl.parentElement !== detailPanel) detailPanel.appendChild(cardDetailEl);
+    } else {
+      detailPanel.hidden = true;
+      if (cardDetailEl.parentElement !== detailSheetBody) detailSheetBody.appendChild(cardDetailEl);
+    }
+  }
+  function openCardDetail(card) {
+    renderCardDetail(card);
+    if (desktopLayout.matches) detailPanel.hidden = false;
+    else if (!detailSheet.open) detailSheet.showModal();
+  }
+  function closeCardDetail() {
+    detailPanel.hidden = true;
+    if (detailSheet.open) detailSheet.close();
+  }
+  desktopLayout.addEventListener("change", placeCardDetail);
+  placeCardDetail();
+  grid.addEventListener("card-open", e => openCardDetail(e.detail));
+  document.getElementById("detail-close").addEventListener("click", closeCardDetail);
+  document.getElementById("detail-sheet-close").addEventListener("click", () => detailSheet.close());
+  detailSheet.addEventListener("click", e => { if (e.target === detailSheet) detailSheet.close(); });
 
   document.querySelectorAll(".color-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1813,7 +2489,7 @@ Counterspell
     e.currentTarget.classList.toggle("active", filters.favsOnly);
     applyFilters();
   });
-  document.getElementById("reset").addEventListener("click", () => {
+  function resetFilters() {
     filters.colors.clear();
     filters.priceMin = filters.priceMax = null;
     filters.sort = "number";
@@ -1826,7 +2502,8 @@ Counterspell
     document.getElementById("search").value = "";
     document.getElementById("fav-filter").classList.remove("active");
     applyFilters();
-  });
+  }
+  document.getElementById("reset").addEventListener("click", resetFilters);
 
   let view = localStorage.getItem(VIEW_KEY) === "gallery" ? "gallery" : "detail";
   function applyView() {
@@ -1845,10 +2522,25 @@ Counterspell
     applyView();
   });
 
+  // Prints-bündeln-Toggle (rein visuell, Daten bleiben je Print getrennt)
+  let groupPrints = localStorage.getItem(GROUP_KEY) === "1";
+  const groupBtn = document.getElementById("group-toggle");
+  groupBtn.classList.toggle("active", groupPrints);
+  groupBtn.addEventListener("click", () => {
+    groupPrints = !groupPrints;
+    localStorage.setItem(GROUP_KEY, groupPrints ? "1" : "0");
+    groupBtn.classList.toggle("active", groupPrints);
+    applyFilters();
+  });
+
   colSelect.addEventListener("change", e => { if (e.target.value) switchCollection(e.target.value); });
   document.getElementById("col-new").addEventListener("click", () => openModal("create"));
   document.getElementById("col-add").addEventListener("click", () => {
     if (currentCollection()) openModal("add");
+  });
+  // FAB (mobil): Karten zur aktuellen Collection hinzufügen, sonst neue anlegen
+  document.getElementById("add-fab").addEventListener("click", () => {
+    openModal(currentCollection() ? "add" : "create");
   });
   document.getElementById("col-cancel").addEventListener("click", closeModal);
   document.getElementById("col-create").addEventListener("click", handleModalSubmit);
@@ -1906,6 +2598,7 @@ Counterspell
     if (e.key !== "Escape") return;
     if (!modalOverlay.hidden) closeModal();
     if (!compareOverlay.hidden) compareOverlay.hidden = true;
+    if (!detailPanel.hidden) closeCardDetail();
     closeMoreMenu();
   });
 
